@@ -322,75 +322,6 @@ function buildRestaurantTagPreview(tagSources) {
       });
     }
 
-    for (const categoryName of source.categoryNames || []) {
-      const definition = createDynamicTagDefinition("CATEGORY", categoryName);
-      const accepted = addTagDefinition(
-        tagDefinitionsByKey,
-        validationIssues,
-        definition,
-        categoryName
-      );
-      if (!accepted) {
-        continue;
-      }
-
-      addRestaurantTag(aggregatedTagsByKey, {
-        tag_key: definition.tagKey,
-        source_type: "CATEGORY",
-        source_text: categoryName,
-        weight: 2.5,
-        confidence: 0.9,
-        matched_menu_count: 0,
-        is_primary: false,
-      });
-    }
-
-    for (const attributeName of source.attributeNames || []) {
-      const definition = createDynamicTagDefinition("ATTRIBUTE", attributeName);
-      const accepted = addTagDefinition(
-        tagDefinitionsByKey,
-        validationIssues,
-        definition,
-        attributeName
-      );
-      if (!accepted) {
-        continue;
-      }
-
-      addRestaurantTag(aggregatedTagsByKey, {
-        tag_key: definition.tagKey,
-        source_type: "ATTRIBUTE",
-        source_text: attributeName,
-        weight: 1.25,
-        confidence: 0.85,
-        matched_menu_count: 0,
-        is_primary: false,
-      });
-    }
-
-    for (const regionName of source.regionNames || []) {
-      const definition = createDynamicTagDefinition("REGION", regionName);
-      const accepted = addTagDefinition(
-        tagDefinitionsByKey,
-        validationIssues,
-        definition,
-        regionName
-      );
-      if (!accepted) {
-        continue;
-      }
-
-      addRestaurantTag(aggregatedTagsByKey, {
-        tag_key: definition.tagKey,
-        source_type: "REGION",
-        source_text: regionName,
-        weight: 1.5,
-        confidence: 1,
-        matched_menu_count: 0,
-        is_primary: false,
-      });
-    }
-
     const aggregatedTags = Array.from(aggregatedTagsByKey.values()).sort((left, right) => {
       if (right.weight !== left.weight) {
         return right.weight - left.weight;
@@ -457,18 +388,6 @@ function buildTagSourceFromStore(store, restaurantSeedIndex) {
       name: sanitizeText(menu?.name || menu?.raw?.name),
       recommend: Boolean(menu?.recommend ?? menu?.raw?.recommend),
     })),
-    categoryNames: sanitizeArray([
-      ...normalizeCategoryParts(store?.broadCategory),
-      ...normalizeCategoryParts(store?.category),
-    ]),
-    attributeNames: sanitizeArray([
-      ...(store?.conveniences || []),
-      ...(store?.paymentInfo || []),
-    ]),
-    regionNames: sanitizeArray([
-      store?.regionName,
-      ...(store?.regionFilterNames || []),
-    ]),
   };
 }
 
@@ -489,21 +408,6 @@ function buildTagSourceFromRestaurantRow({
       name: sanitizeText(menu?.name),
       recommend: false,
     })),
-    categoryNames: sanitizeArray([
-      ...normalizeCategoryParts(categoryRow?.category_name),
-      ...normalizeCategoryParts(store?.broadCategory),
-      ...normalizeCategoryParts(store?.category),
-    ]),
-    attributeNames: sanitizeArray([
-      ...(store?.conveniences || []),
-      ...(store?.paymentInfo || []),
-    ]),
-    regionNames: sanitizeArray([
-      restaurantRow?.region_name,
-      ...(restaurantRow?.region_filter_names || []),
-      store?.regionName,
-      ...(store?.regionFilterNames || []),
-    ]),
   };
 }
 
