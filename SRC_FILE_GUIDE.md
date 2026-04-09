@@ -342,3 +342,25 @@ index.js
 8. [combine_seed.js](/C:/Users/gkswh/OneDrive/바탕%20화면/26-1/캡스톤%20디자인/Capstone_Root/Naver_pcmap_api/Naver_seed/src/combine_seed.js)
 
 이 순서면 실행 흐름, 수집, 정규화, 후처리 순으로 이해할 수 있다.
+
+## 2026-04-10 Addendum: New Tag Candidate Flow
+
+이번 기준으로 `src`에서 신규 태그 후보를 다루는 책임은 아래처럼 나뉜다.
+
+- [tag_extractor.js](/C:/Users/gkswh/OneDrive/바탕%20화면/26-1/캡스톤%20디자인/Capstone_Root/Naver_pcmap_api/Naver_seed/src/tag_extractor.js)
+  - `MENU_TAG_RULES` 정의
+  - 기존 tag 추출
+  - 신규 tag 후보 조건 판정
+  - `tag-candidate-report.json` 생성용 데이터 작성
+- [seed.js](/C:/Users/gkswh/OneDrive/바탕%20화면/26-1/캡스톤%20디자인/Capstone_Root/Naver_pcmap_api/Naver_seed/src/seed.js)
+  - live 수집 결과 기준 `tag-candidate-report.json` 저장
+- [combine_seed.js](/C:/Users/gkswh/OneDrive/바탕%20화면/26-1/캡스톤%20디자인/Capstone_Root/Naver_pcmap_api/Naver_seed/src/combine_seed.js)
+  - combine 결과 기준 `tag-candidate-report.json` 재생성
+- [index.js](/C:/Users/gkswh/OneDrive/바탕%20화면/26-1/캡스톤%20디자인/Capstone_Root/Naver_pcmap_api/Naver_seed/src/index.js)
+  - candidate report 저장 경로 출력
+
+실무 해석:
+
+- `tags`는 자동 확장 대상이 아니다
+- 신규 tag는 `tag-candidate-report.json`에서 본 뒤 수동으로 `MENU_TAG_RULES`에 추가한다
+- 즉, `tag_extractor.js`를 수정하지 않으면 `tags` master는 늘어나지 않는다

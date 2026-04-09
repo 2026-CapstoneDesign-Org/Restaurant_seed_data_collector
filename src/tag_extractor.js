@@ -44,6 +44,39 @@ const MENU_TAG_RULES = [
 const CATEGORY_SPLIT_PATTERN = /\s*(?:,|\/|&|·)\s*|\s+및\s+|\s+and\s+/i;
 const MENU_SEGMENT_SPLIT_PATTERN = /\+|\/|,|&|\s+와\s+|\s+및\s+/;
 const TAG_PARENT_PREFIXES = ["menu:", "category:"];
+const TAG_CANDIDATE_POLICY = {
+  autoTagCreationEnabled: false,
+  reviewMinMenuOccurrenceCount: 3,
+  reviewMinRestaurantCount: 2,
+  approvalMinMenuOccurrenceCount: 5,
+  approvalMinRestaurantCount: 3,
+  minNameLength: 2,
+  maxNameLength: 20,
+  maxWordCount: 4,
+  maxDigitRatio: 0.4,
+  blockedKeywords: [
+    "네이버",
+    "예약",
+    "주문",
+    "스마트콜",
+    "식신",
+    "명지대",
+    "에버라인",
+    "배달",
+    "리뷰",
+    "세트",
+    "정식",
+    "코스",
+  ],
+  blockedExactNames: [
+    "공기밥",
+    "음료수",
+    "대표메뉴",
+    "인기메뉴",
+    "다이닝코드",
+  ],
+  trailingSuffixTokens: ["세트", "정식", "코스", "플래터", "모둠", "한상", "도시락"],
+};
 
 function createMenuRule(tagName, aliases, parentTagName = null, priority = 0) {
   return {
@@ -160,6 +193,99 @@ function resolvePrimaryMenuTag(menuName) {
 
 function roundWeight(value) {
   return Math.round(Number(value) * 100) / 100;
+}
+
+function stripTrailingCandidateTokens(value) {
+  const tokens = normalizeMenuName(value)
+    .split(/\s+/)
+    .map((token) => sanitizeText(token))
+    .filter(Boolean);
+
+  while (
+    tokens.length > 1 &&
+    TAG_CANDIDATE_POLICY.trailingSuffixTokens.includes(tokens[tokens.length - 1])
+  ) {
+    tokens.pop();
+  }
+
+  return tokens.join(" ");
+}
+
+function evaluateTagCandidateName(candidateName) {
+  const normalizedCandidateName = stripTrailingCandidateTokens(candidateName);
+  const compactName = normalizedCandidateName.replace(/\s+/g, "");
+  const digitCount = compactName.replace(/[^\d]/g, "").length;
+  const reasons = [];
+
+  if (!normalizedCandidateName) {
+    reasons.push("empty-name");
+  }
+
+  if (compactName.length < TAG_CANDIDATE_POLICY.minNameLength) {
+    reasons.push("too-short");
+  }
+
+  if (compactName.length > TAG_CANDIDATE_POLICY.maxNameLength) {
+    reasons.push("too-long");
+  }
+
+  if (!/[가-힣A-Za-z]/.test(normalizedCandidateName)) {
+    reasons.push("no-letter");
+  }
+
+  if (
+    normalizedCandidateName.split(/\s+/).filter(Boolean).length >
+    TAG_CANDIDATE_POLICY.maxWordCount
+  ) {
+    reasons.push("too-many-words");
+  }
+
+  if (digitCount && digitCount === compactName.length) {
+    reasons.push("digits-only");
+  } else if (
+    digitCount &&
+    digitCount / compactName.length > TAG_CANDIDATE_POLICY.maxDigitRatio
+  ) {
+    reasons.push("too-many-digits");
+  }
+
+  if (
+    TAG_CANDIDATE_POLICY.blockedKeywords.some((keyword) =>
+      normalizedCandidateName.includes(keyword)
+    )
+  ) {
+    reasons.push("blocked-keyword");
+  }
+
+  if (TAG_CANDIDATE_POLICY.blockedExactNames.includes(normalizedCandidateName)) {
+    reasons.push("blocked-exact-name");
+  }
+
+  if (
+    normalizedCandidateName &&
+    extractMenuTagMatches(normalizedCandidateName).length > 0
+  ) {
+    reasons.push("covered-by-existing-tag");
+  }
+
+  return {
+    normalizedCandidateName,
+    accepted: reasons.length === 0,
+    reasons,
+  };
+}
+
+function buildCandidateRecord(candidateName, stats, decision, decisionReasons) {
+  return {
+    candidate_name: candidateName,
+    candidate_tag_key: buildTagKey("menu", candidateName),
+    decision,
+    decision_reasons: decisionReasons,
+    menu_occurrence_count: stats.menuOccurrenceCount,
+    distinct_restaurant_count: stats.restaurantIds.size,
+    sample_restaurant_names: Array.from(stats.restaurantNames).slice(0, 5),
+    sample_menu_names: Array.from(stats.menuNames).slice(0, 10),
+  };
 }
 
 function validateTagDefinition(definition) {
@@ -288,6 +414,154 @@ function createDynamicTagDefinition(tagType, tagName) {
   };
 }
 
+function buildTagCandidateReport(tagSources, existingTags = []) {
+  const candidateStatsByName = new Map();
+  let totalMenuCount = 0;
+  let matchedMenuCount = 0;
+  let unmatchedMenuCount = 0;
+
+  for (const source of tagSources) {
+    for (const menu of source.menus || []) {
+      const menuName = sanitizeText(menu?.name);
+      const normalizedMenuName = normalizeMenuName(menuName);
+
+      if (!normalizedMenuName) {
+        continue;
+      }
+
+      totalMenuCount += 1;
+
+      if (extractMenuTagMatches(normalizedMenuName).length > 0) {
+        matchedMenuCount += 1;
+        continue;
+      }
+
+      unmatchedMenuCount += 1;
+
+      const segments = splitMenuSegments(normalizedMenuName);
+      const candidateNames = Array.from(
+        new Set(
+          (segments.length ? segments : [normalizedMenuName])
+            .map((segment) => stripTrailingCandidateTokens(segment))
+            .map((segment) => sanitizeText(segment))
+            .filter(Boolean)
+        )
+      );
+
+      for (const candidateName of candidateNames) {
+        const stats = candidateStatsByName.get(candidateName) || {
+          menuOccurrenceCount: 0,
+          restaurantIds: new Set(),
+          restaurantNames: new Set(),
+          menuNames: new Set(),
+        };
+
+        stats.menuOccurrenceCount += 1;
+        stats.restaurantIds.add(source.restaurantSeedIndex);
+
+        if (source.restaurantName) {
+          stats.restaurantNames.add(source.restaurantName);
+        }
+
+        stats.menuNames.add(menuName);
+        candidateStatsByName.set(candidateName, stats);
+      }
+    }
+  }
+
+  const approvalCandidates = [];
+  const reviewCandidates = [];
+  const watchlistCandidates = [];
+  const blockedCandidates = [];
+  const blockedReasonSummary = new Map();
+
+  for (const [candidateName, stats] of candidateStatsByName.entries()) {
+    const evaluation = evaluateTagCandidateName(candidateName);
+
+    if (!evaluation.accepted) {
+      blockedCandidates.push(
+        buildCandidateRecord(candidateName, stats, "BLOCKED", evaluation.reasons)
+      );
+
+      evaluation.reasons.forEach((reason) => {
+        blockedReasonSummary.set(reason, (blockedReasonSummary.get(reason) || 0) + 1);
+      });
+      continue;
+    }
+
+    if (
+      stats.menuOccurrenceCount >= TAG_CANDIDATE_POLICY.approvalMinMenuOccurrenceCount &&
+      stats.restaurantIds.size >= TAG_CANDIDATE_POLICY.approvalMinRestaurantCount
+    ) {
+      approvalCandidates.push(
+        buildCandidateRecord(candidateName, stats, "APPROVAL_READY", [
+          "meets-approval-threshold",
+        ])
+      );
+      continue;
+    }
+
+    if (
+      stats.menuOccurrenceCount >= TAG_CANDIDATE_POLICY.reviewMinMenuOccurrenceCount &&
+      stats.restaurantIds.size >= TAG_CANDIDATE_POLICY.reviewMinRestaurantCount
+    ) {
+      reviewCandidates.push(
+        buildCandidateRecord(candidateName, stats, "REVIEW_READY", [
+          "meets-review-threshold",
+        ])
+      );
+      continue;
+    }
+
+    watchlistCandidates.push(
+      buildCandidateRecord(candidateName, stats, "WATCHLIST", [
+        "insufficient-frequency",
+      ])
+    );
+  }
+
+  const sortCandidates = (left, right) => {
+    if (right.distinct_restaurant_count !== left.distinct_restaurant_count) {
+      return right.distinct_restaurant_count - left.distinct_restaurant_count;
+    }
+
+    if (right.menu_occurrence_count !== left.menu_occurrence_count) {
+      return right.menu_occurrence_count - left.menu_occurrence_count;
+    }
+
+    return left.candidate_name.localeCompare(right.candidate_name, "ko");
+  };
+
+  return {
+    generated_at: new Date().toISOString(),
+    policy: {
+      ...TAG_CANDIDATE_POLICY,
+      current_tag_count: existingTags.length,
+      note: "APPROVAL_READY also requires manual review and explicit MENU_TAG_RULES update.",
+    },
+    summary: {
+      total_menu_count: totalMenuCount,
+      matched_menu_count: matchedMenuCount,
+      unmatched_menu_count: unmatchedMenuCount,
+      unique_unmatched_candidate_count: candidateStatsByName.size,
+      approval_ready_count: approvalCandidates.length,
+      review_ready_count: reviewCandidates.length,
+      watchlist_count: watchlistCandidates.length,
+      blocked_count: blockedCandidates.length,
+    },
+    approval_ready_candidates: approvalCandidates.sort(sortCandidates),
+    review_ready_candidates: reviewCandidates.sort(sortCandidates),
+    watchlist_candidates: watchlistCandidates.sort(sortCandidates),
+    blocked_candidates: blockedCandidates.sort(sortCandidates),
+    blocked_reason_summary: Array.from(blockedReasonSummary.entries())
+      .map(([reason, count]) => ({
+        reason,
+        count,
+      }))
+      .sort((left, right) => right.count - left.count),
+  };
+}
+
 function buildRestaurantTagPreview(tagSources) {
   const tagDefinitionsByKey = new Map();
   const restaurantTags = [];
@@ -377,6 +651,7 @@ function buildRestaurantTagPreview(tagSources) {
       rejected_tag_count: validationIssues.length,
       rejected_tags: validationIssues,
     },
+    candidateReport: buildTagCandidateReport(tagSources, tags),
   };
 }
 
@@ -413,6 +688,8 @@ function buildTagSourceFromRestaurantRow({
 
 module.exports = {
   MENU_TAG_RULES,
+  TAG_CANDIDATE_POLICY,
+  buildTagCandidateReport,
   buildRestaurantTagPreview,
   buildTagKey,
   buildTagSourceFromRestaurantRow,

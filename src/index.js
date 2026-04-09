@@ -43,6 +43,9 @@ async function main() {
       console.log(
         `[saved-tag-validation-report] ${result.tagValidationReportPath}`
       );
+      console.log(
+        `[saved-tag-candidate-report] ${result.tagCandidateReportPath}`
+      );
       console.log(`[saved-duplicates] ${result.duplicatesPath}`);
       console.log(`[saved-summary] ${result.summaryPath}`);
       return;
@@ -70,6 +73,9 @@ async function main() {
       );
       console.log(
         `[saved-tag-validation-report] ${result.tagValidationReportPath}`
+      );
+      console.log(
+        `[saved-tag-candidate-report] ${result.tagCandidateReportPath}`
       );
       console.log(`[saved-duplicates] ${result.duplicatesPath}`);
       console.log(`[saved-summary] ${result.summaryPath}`);

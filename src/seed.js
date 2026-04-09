@@ -691,6 +691,7 @@ function buildDatabaseSeedPreview(stores) {
     tags: tagPreview.tags,
     restaurantTags: tagPreview.restaurantTags,
     tagValidationReport: tagPreview.validationReport,
+    tagCandidateReport: tagPreview.candidateReport,
   };
 }
 
@@ -731,6 +732,7 @@ async function runSeedPipeline() {
       tagCount: databaseSeedPreview.tags.length,
       restaurantTagCount: databaseSeedPreview.restaurantTags.length,
       tagValidationReport: databaseSeedPreview.tagValidationReport,
+      tagCandidateReport: databaseSeedPreview.tagCandidateReport,
     },
   };
 
@@ -762,6 +764,10 @@ async function runSeedPipeline() {
     withOutputPrefix("tag-validation-report.json"),
     databaseSeedPreview.tagValidationReport
   );
+  const tagCandidateReportPath = saveJson(
+    withOutputPrefix("tag-candidate-report.json"),
+    databaseSeedPreview.tagCandidateReport
+  );
 
   console.log(`[seed-stores] selected=${seedStoreCollection.stores.length}`);
   console.log(`[saved-summary] ${summaryPath}`);
@@ -775,6 +781,7 @@ async function runSeedPipeline() {
   console.log(`[saved-tags-preview] ${tagsSeedPath}`);
   console.log(`[saved-restaurant-tags-preview] ${restaurantTagsSeedPath}`);
   console.log(`[saved-tag-validation-report] ${tagValidationReportPath}`);
+  console.log(`[saved-tag-candidate-report] ${tagCandidateReportPath}`);
 }
 
 module.exports = {

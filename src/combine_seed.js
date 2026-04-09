@@ -457,6 +457,7 @@ function buildCombinedSeedPreview() {
     tags: tagPreview.tags,
     restaurantTags: tagPreview.restaurantTags,
     tagValidationReport: tagPreview.validationReport,
+    tagCandidateReport: tagPreview.candidateReport,
     duplicates,
   };
 }
@@ -481,6 +482,7 @@ function runCombineSeedPreviewExport() {
     duplicate_count: combined.duplicates.length,
     menu_mapped_count: menuMappedCount,
     tag_validation_report: combined.tagValidationReport,
+    tag_candidate_report: combined.tagCandidateReport,
     input_pairs: listSeedPreviewPairs().map((pair) => ({
       area_name: pair.areaName,
       restaurants_path: pair.restaurantsPath,
@@ -509,6 +511,10 @@ function runCombineSeedPreviewExport() {
     GENERIC_TAG_VALIDATION_REPORT,
     combined.tagValidationReport
   );
+  const tagCandidateReportPath = saveJson(
+    "tag-candidate-report.json",
+    combined.tagCandidateReport
+  );
   const duplicatesPath = saveJson(
     "combined-seed-duplicates.json",
     combined.duplicates
@@ -528,6 +534,7 @@ function runCombineSeedPreviewExport() {
     tagsPreviewPath,
     restaurantTagsPreviewPath,
     tagValidationReportPath,
+    tagCandidateReportPath,
     duplicatesPath,
     summaryPath,
   };

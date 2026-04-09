@@ -265,3 +265,75 @@ node -e "const fs=require('fs'); const rows=JSON.parse(fs.readFileSync('./output
 
 - `tags.tag_type` -> `["MENU"]`
 - `restaurant_tags.source_type` -> `["MENU"]`
+
+## 2026-04-10 Tag Governance Update
+
+`tags`와 `restaurant_tags`는 운영 방식이 다르다.
+
+- `tags`
+  - 승인된 canonical menu tag master
+  - 자동으로 계속 늘리지 않는다
+- `restaurant_tags`
+  - 식당별 파생 결과
+  - 새 지역, 새 식당이 들어올 때마다 계속 다시 계산한다
+
+현재 정책:
+
+- 태그 자동 생성은 `MENU_TAG_RULES`에 정의된 항목만 허용
+- 신규 태그는 raw 데이터에서 바로 `tags`에 넣지 않음
+- 대신 `tag-candidate-report.json`으로 후보를 검토한 뒤 수동으로 `MENU_TAG_RULES`에 추가
+
+### 신규 태그 추가 조건
+
+신규 menu tag는 아래 조건을 통과한 후보만 검토한다.
+
+하드 필터:
+
+- 메뉴 기반 후보여야 함
+- 최소 글자 수 `2`
+- 최대 글자 수 `20`
+- 최대 단어 수 `4`
+- 숫자 비율 `40%` 초과 금지
+- 숫자만 있는 이름 금지
+- 기존 tag로 이미 커버되는 이름 금지
+- 플랫폼/서비스성 키워드 금지
+  - 예: `네이버`, `예약`, `주문`, `스마트콜`, `식신`
+- 즉시 제외 exact name
+  - 예: `공기밥`, `음료수`, `대표메뉴`, `다이닝코드`
+
+수량 조건:
+
+- `APPROVAL_READY`
+  - 메뉴 출현 수 `5` 이상
+  - 서로 다른 식당 수 `3` 이상
+- `REVIEW_READY`
+  - 메뉴 출현 수 `3` 이상
+  - 서로 다른 식당 수 `2` 이상
+
+중요:
+
+- `APPROVAL_READY`도 자동 반영이 아니다
+- 최종 반영은 사람이 `MENU_TAG_RULES`를 수정하는 방식으로만 진행한다
+
+### 신규 산출물
+
+이제 아래 파일이 추가로 생성된다.
+
+- `tag-candidate-report.json`
+  - 신규 태그 후보 리포트
+  - `APPROVAL_READY / REVIEW_READY / WATCHLIST / BLOCKED`로 분류
+
+### 운영 권장 방식
+
+1. 새 지역을 계속 수집한다
+2. `restaurant_menu_items`와 `restaurant_tags`는 계속 누적/재계산한다
+3. `tag-candidate-report.json`에서 반복 등장 후보를 본다
+4. 승인할 태그만 `src/tag_extractor.js`의 `MENU_TAG_RULES`에 수동 추가한다
+
+현재 `src/seed_config.js` 기준 활성 지역:
+
+- `역북동`
+- `삼가동`
+- `남동`
+- `김량장동`
+- `서리`
