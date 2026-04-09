@@ -337,3 +337,54 @@ node -e "const fs=require('fs'); const rows=JSON.parse(fs.readFileSync('./output
 - `남동`
 - `김량장동`
 - `서리`
+
+## 2026-04-10 After Collection: Capstone Import
+
+수집 후 DB 적재는 `Capstone`에서 진행한다.
+
+### 1. 수집 실행
+
+```powershell
+cd "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Naver_pcmap_api\Naver_seed"
+npm run seed:refresh
+```
+
+### 2. Capstone import 대상 파일
+
+`Capstone/Capstone/seed-data/` 로 복사해야 하는 파일:
+
+- `restaurants-seed-preview.json`
+- `restaurant-categories-seed-preview.json`
+- `restaurant-menu-items-seed-preview.json`
+- `tags-seed-preview.json`
+- `restaurant-tags-seed-preview.json`
+
+관리용 파일이라 import하지 않는 것:
+
+- `tag-validation-report.json`
+- `tag-candidate-report.json`
+
+### 3. 복사 예시
+
+```powershell
+Copy-Item "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Naver_pcmap_api\Naver_seed\output\restaurants-seed-preview.json" "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Capstone\Capstone\seed-data\restaurants-seed-preview.json" -Force
+Copy-Item "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Naver_pcmap_api\Naver_seed\output\restaurant-categories-seed-preview.json" "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Capstone\Capstone\seed-data\restaurant-categories-seed-preview.json" -Force
+Copy-Item "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Naver_pcmap_api\Naver_seed\output\restaurant-menu-items-seed-preview.json" "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Capstone\Capstone\seed-data\restaurant-menu-items-seed-preview.json" -Force
+Copy-Item "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Naver_pcmap_api\Naver_seed\output\tags-seed-preview.json" "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Capstone\Capstone\seed-data\tags-seed-preview.json" -Force
+Copy-Item "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Naver_pcmap_api\Naver_seed\output\restaurant-tags-seed-preview.json" "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Capstone\Capstone\seed-data\restaurant-tags-seed-preview.json" -Force
+```
+
+### 4. Capstone runner import
+
+```powershell
+cd "C:\Users\gkswh\OneDrive\바탕 화면\26-1\캡스톤 디자인\Capstone_Root\Capstone\Capstone"
+.\gradlew.bat bootRun --args="--seed.import.enabled=true --seed.import.exit-after-run=true"
+```
+
+필요하면 dev DB 전체 초기화 후 다시 넣는다.
+
+```powershell
+docker exec postgres-dev psql -U dev_user -d dev_db -c "TRUNCATE TABLE list_restaurants, restaurant_categories, restaurant_menu_items, restaurant_tags, restaurants, tags, user_lists, users RESTART IDENTITY CASCADE;"
+```
+
+자세한 import 설명은 [Capstone README.md](/C:/Users/gkswh/OneDrive/바탕%20화면/26-1/캡스톤%20디자인/Capstone_Root/Capstone/README.md)를 기준으로 본다.
