@@ -5,7 +5,14 @@ const { getAreaSortOrder, normalizeAreaName } = require("./seed_config");
 const {
   buildRestaurantTagPreview,
   buildTagSourceFromRestaurantRow,
+  resolvePrimaryMenuTag,
 } = require("./tag_extractor");
+const {
+  buildMenuPayload,
+  buildNormalizedMenuBase,
+  toNullableNumber,
+} = require("./menu_normalizer");
+const { buildRegionSchema } = require("./region_utils");
 const { saveJson, sanitizeText } = require("./utils");
 
 const OUTPUT_DIR = path.resolve(__dirname, "..", "output");
@@ -14,8 +21,10 @@ const CATEGORIES_PREVIEW_SUFFIX = "-restaurant-categories-seed-preview.json";
 const AREA_RESULT_SUFFIX = "-pcmap-area-seed-result.json";
 const GENERIC_RESTAURANTS_PREVIEW = "restaurants-seed-preview.json";
 const GENERIC_CATEGORIES_PREVIEW = "restaurant-categories-seed-preview.json";
+const GENERIC_MENU_ITEMS_PREVIEW = "restaurant-menu-items-seed-preview.json";
 const GENERIC_TAGS_PREVIEW = "tags-seed-preview.json";
 const GENERIC_RESTAURANT_TAGS_PREVIEW = "restaurant-tags-seed-preview.json";
+const GENERIC_TAG_VALIDATION_REPORT = "tag-validation-report.json";
 const GENERIC_AREA_RESULT = "pcmap-area-seed-result.json";
 
 function normalizeKey(value) {
@@ -67,10 +76,7 @@ function listSeedPreviewPairs() {
   const genericRestaurantsPath = path.join(OUTPUT_DIR, GENERIC_RESTAURANTS_PREVIEW);
   const genericCategoriesPath = path.join(OUTPUT_DIR, GENERIC_CATEGORIES_PREVIEW);
 
-  if (
-    fs.existsSync(genericRestaurantsPath) &&
-    fs.existsSync(genericCategoriesPath)
-  ) {
+  if (fs.existsSync(genericRestaurantsPath) && fs.existsSync(genericCategoriesPath)) {
     return [
       {
         areaName: "current-run",
@@ -138,62 +144,6 @@ function loadJsonObject(filePath) {
   return parsed && typeof parsed === "object" ? parsed : null;
 }
 
-function toNullableNumber(value) {
-  const text = sanitizeText(value);
-  if (!text) {
-    return null;
-  }
-
-  const number = Number(text);
-  return Number.isFinite(number) ? number : null;
-}
-
-function normalizeMenuItem(menu, index) {
-  if (!menu || typeof menu !== "object") {
-    return null;
-  }
-
-  const priceValue = toNullableNumber(menu.price_value ?? menu.price ?? menu.raw?.price);
-  const images = Array.isArray(menu.images)
-    ? menu.images.map((image) => sanitizeText(image)).filter(Boolean)
-    : [];
-
-  return {
-    id: sanitizeText(menu.id || menu.raw?.id),
-    index: Number.isFinite(menu.index) ? menu.index : index,
-    name: sanitizeText(menu.name || menu.raw?.name),
-    price_text: sanitizeText(menu.price_text || menu.price),
-    price_value: priceValue,
-    description: sanitizeText(menu.description || menu.raw?.description) || null,
-    recommend: Boolean(menu.recommend ?? menu.raw?.recommend),
-    images,
-  };
-}
-
-function buildMenuPayload(restaurantRow, store) {
-  const rawMenus = Array.isArray(restaurantRow?.menu_json?.menus)
-    ? restaurantRow.menu_json.menus
-    : Array.isArray(store?.menus)
-    ? store.menus
-    : [];
-
-  const menus = rawMenus
-    .map((menu, index) => normalizeMenuItem(menu, index))
-    .filter((menu) => menu && menu.name);
-
-  return {
-    source: sanitizeText(restaurantRow?.menu_json?.source || "pcmap"),
-    place_id: sanitizeText(
-      restaurantRow?.menu_json?.place_id ||
-        restaurantRow?.pcmap_place_id ||
-        restaurantRow?.source_place_id ||
-        store?.placeId
-    ),
-    menu_count: menus.length,
-    menus,
-  };
-}
-
 function buildStoreQualityScore(store) {
   const menus = Array.isArray(store?.menus) ? store.menus.length : 0;
   return (
@@ -227,87 +177,6 @@ function loadAreaStoresByPlaceId() {
   }
 
   return storesByPlaceId;
-}
-
-function findAddressToken(values, pattern) {
-  for (const value of values.map((item) => sanitizeText(item)).filter(Boolean)) {
-    const matchedTokens = value
-      .split(/\s+/)
-      .filter((token) => pattern.test(token));
-
-    if (matchedTokens.length > 0) {
-      return sanitizeText(matchedTokens.at(-1));
-    }
-  }
-
-  return "";
-}
-
-function extractDistrictFromText(...values) {
-  return findAddressToken(values, /[가-힣]+구$/);
-}
-
-function extractCityFromText(...values) {
-  return findAddressToken(values, /[가-힣]+시$/);
-}
-
-function extractCountyFromText(...values) {
-  return findAddressToken(values, /[가-힣]+군$/);
-}
-
-function extractLocalAreaFromText(...values) {
-  return findAddressToken(values, /[가-힣0-9]+(동|읍|면|리|가)$/);
-}
-
-function buildRegionFilterNames(...values) {
-  const city = extractCityFromText(...values);
-  const county = extractCountyFromText(...values);
-  const district = extractDistrictFromText(...values);
-
-  if (county) {
-    return [county];
-  }
-
-  return Array.from(new Set([city, district].filter(Boolean)));
-}
-
-function buildRegionSchema(adminArea, ...values) {
-  const city = extractCityFromText(...values);
-  const county = extractCountyFromText(...values);
-  const district = extractDistrictFromText(...values);
-  const regionName = buildRegionName(adminArea, ...values);
-
-  return {
-    regionName,
-    regionCityName: city || null,
-    regionDistrictName: district || null,
-    regionCountyName: county || null,
-    regionFilterNames: buildRegionFilterNames(...values, regionName),
-  };
-}
-
-function buildRegionName(adminArea, ...values) {
-  const city = extractCityFromText(...values);
-  const county = extractCountyFromText(...values);
-  const district = extractDistrictFromText(...values);
-
-  if (county) {
-    return county;
-  }
-
-  if (city && district) {
-    return `${city} ${district}`;
-  }
-
-  if (city) {
-    return city;
-  }
-
-  if (district) {
-    return district;
-  }
-
-  return sanitizeText(adminArea);
 }
 
 function buildRestaurantDedupKey(restaurantRow) {
@@ -353,6 +222,27 @@ function buildRestaurantQualityScore(restaurantRow) {
   );
 }
 
+function buildSimplifiedMenuPayload(restaurantRow, store) {
+  const rawMenus = Array.isArray(restaurantRow?.menu_json?.menus)
+    ? restaurantRow.menu_json.menus
+    : Array.isArray(store?.menus)
+    ? store.menus
+    : [];
+
+  const payload = buildMenuPayload(rawMenus);
+
+  return {
+    source: sanitizeText(restaurantRow?.menu_json?.source || "pcmap"),
+    place_id: sanitizeText(
+      restaurantRow?.menu_json?.place_id ||
+        restaurantRow?.pcmap_place_id ||
+        restaurantRow?.source_place_id ||
+        store?.placeId
+    ),
+    ...payload,
+  };
+}
+
 function normalizeRestaurantRow(
   restaurantRow,
   categoryRow,
@@ -366,7 +256,7 @@ function normalizeRestaurantRow(
   const adminArea =
     normalizeAreaName(store?.adminArea) ||
     normalizeAreaName(areaName === "current-run" ? "" : areaName);
-  const menuJson = buildMenuPayload(restaurantRow, store);
+  const menuJson = buildSimplifiedMenuPayload(restaurantRow, store);
   const regionSchema = buildRegionSchema(
     adminArea,
     store?.address,
@@ -431,6 +321,38 @@ function normalizeRestaurantRow(
       menu_updated_at: sanitizeText(restaurantRow?.menu_updated_at) || "NOW()",
     },
   };
+}
+
+function buildCombinedRestaurantMenuItems(normalizedRows) {
+  return normalizedRows.flatMap((item, index) =>
+    (Array.isArray(item.row?.menu_json?.menus) ? item.row.menu_json.menus : [])
+      .map((menu, menuIndex) => {
+        const normalizedMenu = buildNormalizedMenuBase(menu, menuIndex);
+        if (!normalizedMenu) {
+          return null;
+        }
+
+        const primaryMenuTag = resolvePrimaryMenuTag(normalizedMenu.menuName);
+
+        return {
+          seed_index: `${index + 1}-${menuIndex + 1}`,
+          restaurant_seed_index: index + 1,
+          display_order: normalizedMenu.displayOrder,
+          source_menu_id: normalizedMenu.sourceMenuId,
+          menu_name: normalizedMenu.menuName,
+          normalized_menu_name: primaryMenuTag
+            ? primaryMenuTag.tagName
+            : normalizedMenu.menuName,
+          menu_tag_key: primaryMenuTag ? primaryMenuTag.tagKey : null,
+          price_text: normalizedMenu.priceText,
+          price_value: normalizedMenu.priceValue,
+          description: normalizedMenu.description,
+          created_at: "NOW()",
+          updated_at: "NOW()",
+        };
+      })
+      .filter(Boolean)
+  );
 }
 
 function buildCombinedSeedPreview() {
@@ -507,6 +429,8 @@ function buildCombinedSeedPreview() {
     updated_at: "NOW()",
   }));
 
+  const restaurantMenuItems = buildCombinedRestaurantMenuItems(normalizedRows);
+
   const tagPreview = buildRestaurantTagPreview(
     normalizedRows.map((item, index) =>
       buildTagSourceFromRestaurantRow({
@@ -529,8 +453,10 @@ function buildCombinedSeedPreview() {
     areaNames: pairs.map((pair) => pair.areaName),
     restaurants,
     restaurantCategories,
+    restaurantMenuItems,
     tags: tagPreview.tags,
     restaurantTags: tagPreview.restaurantTags,
+    tagValidationReport: tagPreview.validationReport,
     duplicates,
   };
 }
@@ -549,10 +475,12 @@ function runCombineSeedPreviewExport() {
     area_names: combined.areaNames,
     restaurant_count: combined.restaurants.length,
     category_count: combined.restaurantCategories.length,
+    menu_item_count: combined.restaurantMenuItems.length,
     tag_count: combined.tags.length,
     restaurant_tag_count: combined.restaurantTags.length,
     duplicate_count: combined.duplicates.length,
     menu_mapped_count: menuMappedCount,
+    tag_validation_report: combined.tagValidationReport,
     input_pairs: listSeedPreviewPairs().map((pair) => ({
       area_name: pair.areaName,
       restaurants_path: pair.restaurantsPath,
@@ -568,10 +496,18 @@ function runCombineSeedPreviewExport() {
     GENERIC_CATEGORIES_PREVIEW,
     combined.restaurantCategories
   );
+  const menuItemsPreviewPath = saveJson(
+    GENERIC_MENU_ITEMS_PREVIEW,
+    combined.restaurantMenuItems
+  );
   const tagsPreviewPath = saveJson(GENERIC_TAGS_PREVIEW, combined.tags);
   const restaurantTagsPreviewPath = saveJson(
     GENERIC_RESTAURANT_TAGS_PREVIEW,
     combined.restaurantTags
+  );
+  const tagValidationReportPath = saveJson(
+    GENERIC_TAG_VALIDATION_REPORT,
+    combined.tagValidationReport
   );
   const duplicatesPath = saveJson(
     "combined-seed-duplicates.json",
@@ -583,12 +519,15 @@ function runCombineSeedPreviewExport() {
     areaCount: combined.areaNames.length,
     restaurantCount: combined.restaurants.length,
     categoryCount: combined.restaurantCategories.length,
+    menuItemCount: combined.restaurantMenuItems.length,
     duplicateCount: combined.duplicates.length,
     menuMappedCount,
     restaurantsPreviewPath,
     categoriesPreviewPath,
+    menuItemsPreviewPath,
     tagsPreviewPath,
     restaurantTagsPreviewPath,
+    tagValidationReportPath,
     duplicatesPath,
     summaryPath,
   };

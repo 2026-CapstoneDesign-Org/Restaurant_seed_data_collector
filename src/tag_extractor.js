@@ -1,7 +1,8 @@
+const { normalizeMenuName } = require("./menu_normalizer");
 const { sanitizeText } = require("./utils");
 
 const MENU_TAG_RULES = [
-  createMenuRule("카츠동", ["카츠동", "돈카츠동"], "덮밥", 120),
+  createMenuRule("카츠동", ["카츠동", "안심카츠동", "돈카츠동"], "덮밥", 120),
   createMenuRule("사케동", ["사케동"], "덮밥", 115),
   createMenuRule("규동", ["규동"], "덮밥", 110),
   createMenuRule("라멘", ["돈코츠라멘", "라멘"], null, 105),
@@ -17,7 +18,7 @@ const MENU_TAG_RULES = [
   createMenuRule("떡볶이", ["떡볶이"], null, 87),
   createMenuRule("김밥", ["김밥"], null, 86),
   createMenuRule("비빔밥", ["비빔밥"], "덮밥", 85),
-  createMenuRule("덮밥", ["덮밥", "차슈동", "치킨마요동", "에비동", "유케동"], null, 84),
+  createMenuRule("덮밥", ["덮밥", "차슈덮밥", "치킨마요덮밥", "유부동"], null, 84),
   createMenuRule("돈까스", ["돈까스", "돈카츠"], "카츠", 83),
   createMenuRule("카츠", ["카츠", "히레카츠", "치즈카츠"], null, 82),
   createMenuRule("국밥", ["국밥"], null, 81),
@@ -33,14 +34,16 @@ const MENU_TAG_RULES = [
   createMenuRule("육회", ["육회"], null, 71),
   createMenuRule("물회", ["물회"], null, 70),
   createMenuRule("스테이크", ["스테이크"], null, 69),
-  createMenuRule("장칼", ["장칼"], null, 68),
+  createMenuRule("장칼국수", ["장칼국수"], "국수", 68),
   createMenuRule("고로케", ["고로케"], null, 67),
   createMenuRule("하이볼", ["하이볼"], null, 66),
   createMenuRule("맥주", ["생맥주", "맥주"], null, 65),
+  createMenuRule("와플", ["와플"], null, 64),
 ];
 
-const CATEGORY_SPLIT_PATTERN = /[,/&]|및|와/;
-const MENU_SEGMENT_SPLIT_PATTERN = /\+|\/|,|&| 및 | 와 /;
+const CATEGORY_SPLIT_PATTERN = /\s*(?:,|\/|&|·)\s*|\s+및\s+|\s+and\s+/i;
+const MENU_SEGMENT_SPLIT_PATTERN = /\+|\/|,|&|\s+와\s+|\s+및\s+/;
+const TAG_PARENT_PREFIXES = ["menu:", "category:"];
 
 function createMenuRule(tagName, aliases, parentTagName = null, priority = 0) {
   return {
@@ -59,7 +62,9 @@ function createMenuRule(tagName, aliases, parentTagName = null, priority = 0) {
 
 const SORTED_MENU_TAG_RULES = [...MENU_TAG_RULES].sort((left, right) => {
   const leftMaxAliasLength = Math.max(...left.aliases.map((alias) => alias.length));
-  const rightMaxAliasLength = Math.max(...right.aliases.map((alias) => alias.length));
+  const rightMaxAliasLength = Math.max(
+    ...right.aliases.map((alias) => alias.length)
+  );
 
   if (rightMaxAliasLength !== leftMaxAliasLength) {
     return rightMaxAliasLength - leftMaxAliasLength;
@@ -67,13 +72,6 @@ const SORTED_MENU_TAG_RULES = [...MENU_TAG_RULES].sort((left, right) => {
 
   return right.priority - left.priority;
 });
-
-function normalizeKey(value) {
-  return sanitizeText(value)
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, "");
-}
 
 function buildTagKey(prefix, name) {
   const normalized = sanitizeText(name)
@@ -100,23 +98,12 @@ function normalizeCategoryParts(value) {
     sanitizeText(value)
       .split(CATEGORY_SPLIT_PATTERN)
       .map((part) => sanitizeText(part))
+      .filter((part) => part.length >= 2)
   );
 }
 
-function normalizeMenuCandidateText(menuName) {
-  return sanitizeText(menuName)
-    .replace(/\[[^\]]*]/g, " ")
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/[:：]/g, " ")
-    .replace(/\bnew\b/gi, " ")
-    .replace(/\bset\b/gi, " ")
-    .replace(/정식|세트|콤보|한정판매|계절메뉴|공기밥포함|공기밥 포함/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function splitMenuSegments(menuName) {
-  const normalized = normalizeMenuCandidateText(menuName);
+  const normalized = normalizeMenuName(menuName);
   if (!normalized) {
     return [];
   }
@@ -130,7 +117,7 @@ function splitMenuSegments(menuName) {
 }
 
 function findMenuRuleForSegment(segment) {
-  const normalizedSegment = normalizeMenuCandidateText(segment);
+  const normalizedSegment = normalizeMenuName(segment);
   if (!normalizedSegment) {
     return null;
   }
@@ -167,18 +154,96 @@ function extractMenuTagMatches(menuName) {
   );
 }
 
-function addTagDefinition(tagDefinitionsByKey, definition) {
+function resolvePrimaryMenuTag(menuName) {
+  return extractMenuTagMatches(menuName)[0] || null;
+}
+
+function roundWeight(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
+function validateTagDefinition(definition) {
   if (!definition?.tagKey || !definition?.tagName || !definition?.tagType) {
-    return;
+    return {
+      accepted: false,
+      reason: "missing-required-field",
+    };
+  }
+
+  if (
+    definition.parentTagKey &&
+    !TAG_PARENT_PREFIXES.some((prefix) => definition.parentTagKey.startsWith(prefix))
+  ) {
+    return {
+      accepted: false,
+      reason: "invalid-parent-prefix",
+    };
+  }
+
+  if (
+    definition.parentTagKey &&
+    !["MENU", "CATEGORY"].includes(definition.tagType)
+  ) {
+    return {
+      accepted: false,
+      reason: "parent-not-allowed-for-tag-type",
+    };
+  }
+
+  if (definition.tagType === "CATEGORY" && definition.tagName.length < 2) {
+    return {
+      accepted: false,
+      reason: "category-tag-too-short",
+    };
+  }
+
+  if (definition.tagType === "MENU" && definition.tagName.length < 2) {
+    return {
+      accepted: false,
+      reason: "menu-tag-too-short",
+    };
+  }
+
+  return {
+    accepted: true,
+    reason: null,
+  };
+}
+
+function pushValidationIssue(validationIssues, definition, validationResult, sourceText) {
+  validationIssues.push({
+    tag_key: definition?.tagKey || null,
+    tag_name: definition?.tagName || null,
+    tag_type: definition?.tagType || null,
+    parent_tag_key: definition?.parentTagKey || null,
+    source_text: sanitizeText(sourceText) || null,
+    reason: validationResult.reason,
+  });
+}
+
+function addTagDefinition(tagDefinitionsByKey, validationIssues, definition, sourceText) {
+  if (!definition) {
+    return false;
   }
 
   if (definition.parentTagName && definition.parentTagKey) {
-    addTagDefinition(tagDefinitionsByKey, {
-      tagKey: definition.parentTagKey,
-      tagName: definition.parentTagName,
-      tagType: definition.tagType,
-      parentTagKey: null,
-    });
+    addTagDefinition(
+      tagDefinitionsByKey,
+      validationIssues,
+      {
+        tagKey: definition.parentTagKey,
+        tagName: definition.parentTagName,
+        tagType: definition.tagType,
+        parentTagKey: null,
+      },
+      sourceText
+    );
+  }
+
+  const validationResult = validateTagDefinition(definition);
+  if (!validationResult.accepted) {
+    pushValidationIssue(validationIssues, definition, validationResult, sourceText);
+    return false;
   }
 
   if (!tagDefinitionsByKey.has(definition.tagKey)) {
@@ -190,6 +255,8 @@ function addTagDefinition(tagDefinitionsByKey, definition) {
       is_active: true,
     });
   }
+
+  return true;
 }
 
 function addRestaurantTag(aggregatedTagsByKey, tagRow) {
@@ -212,10 +279,6 @@ function addRestaurantTag(aggregatedTagsByKey, tagRow) {
   });
 }
 
-function roundWeight(value) {
-  return Math.round(Number(value) * 100) / 100;
-}
-
 function createDynamicTagDefinition(tagType, tagName) {
   return {
     tagKey: buildTagKey(tagType.toLowerCase(), tagName),
@@ -228,6 +291,7 @@ function createDynamicTagDefinition(tagType, tagName) {
 function buildRestaurantTagPreview(tagSources) {
   const tagDefinitionsByKey = new Map();
   const restaurantTags = [];
+  const validationIssues = [];
 
   for (const source of tagSources) {
     const aggregatedTagsByKey = new Map();
@@ -236,7 +300,16 @@ function buildRestaurantTagPreview(tagSources) {
       const matchedRules = extractMenuTagMatches(menu.name);
 
       matchedRules.forEach((rule, index) => {
-        addTagDefinition(tagDefinitionsByKey, rule);
+        const accepted = addTagDefinition(
+          tagDefinitionsByKey,
+          validationIssues,
+          rule,
+          menu.name
+        );
+        if (!accepted) {
+          return;
+        }
+
         addRestaurantTag(aggregatedTagsByKey, {
           tag_key: rule.tagKey,
           source_type: "MENU",
@@ -250,12 +323,19 @@ function buildRestaurantTagPreview(tagSources) {
     }
 
     for (const categoryName of source.categoryNames || []) {
-      addTagDefinition(
+      const definition = createDynamicTagDefinition("CATEGORY", categoryName);
+      const accepted = addTagDefinition(
         tagDefinitionsByKey,
-        createDynamicTagDefinition("CATEGORY", categoryName)
+        validationIssues,
+        definition,
+        categoryName
       );
+      if (!accepted) {
+        continue;
+      }
+
       addRestaurantTag(aggregatedTagsByKey, {
-        tag_key: buildTagKey("category", categoryName),
+        tag_key: definition.tagKey,
         source_type: "CATEGORY",
         source_text: categoryName,
         weight: 2.5,
@@ -266,12 +346,19 @@ function buildRestaurantTagPreview(tagSources) {
     }
 
     for (const attributeName of source.attributeNames || []) {
-      addTagDefinition(
+      const definition = createDynamicTagDefinition("ATTRIBUTE", attributeName);
+      const accepted = addTagDefinition(
         tagDefinitionsByKey,
-        createDynamicTagDefinition("ATTRIBUTE", attributeName)
+        validationIssues,
+        definition,
+        attributeName
       );
+      if (!accepted) {
+        continue;
+      }
+
       addRestaurantTag(aggregatedTagsByKey, {
-        tag_key: buildTagKey("attribute", attributeName),
+        tag_key: definition.tagKey,
         source_type: "ATTRIBUTE",
         source_text: attributeName,
         weight: 1.25,
@@ -282,12 +369,19 @@ function buildRestaurantTagPreview(tagSources) {
     }
 
     for (const regionName of source.regionNames || []) {
-      addTagDefinition(
+      const definition = createDynamicTagDefinition("REGION", regionName);
+      const accepted = addTagDefinition(
         tagDefinitionsByKey,
-        createDynamicTagDefinition("REGION", regionName)
+        validationIssues,
+        definition,
+        regionName
       );
+      if (!accepted) {
+        continue;
+      }
+
       addRestaurantTag(aggregatedTagsByKey, {
-        tag_key: buildTagKey("region", regionName),
+        tag_key: definition.tagKey,
         source_type: "REGION",
         source_text: regionName,
         weight: 1.5,
@@ -347,6 +441,11 @@ function buildRestaurantTagPreview(tagSources) {
 
       return left.tag_key.localeCompare(right.tag_key, "ko");
     }),
+    validationReport: {
+      accepted_tag_count: tags.length,
+      rejected_tag_count: validationIssues.length,
+      rejected_tags: validationIssues,
+    },
   };
 }
 
@@ -387,8 +486,8 @@ function buildTagSourceFromRestaurantRow({
     restaurantSeedIndex,
     restaurantName: sanitizeText(restaurantRow?.name || store?.name),
     menus: menus.map((menu) => ({
-      name: sanitizeText(menu?.name || menu?.raw?.name),
-      recommend: Boolean(menu?.recommend ?? menu?.raw?.recommend),
+      name: sanitizeText(menu?.name),
+      recommend: false,
     })),
     categoryNames: sanitizeArray([
       ...normalizeCategoryParts(categoryRow?.category_name),
@@ -415,4 +514,6 @@ module.exports = {
   buildTagSourceFromRestaurantRow,
   buildTagSourceFromStore,
   extractMenuTagMatches,
+  normalizeCategoryParts,
+  resolvePrimaryMenuTag,
 };

@@ -26,15 +26,22 @@ async function main() {
       console.log(`[combined-seed-areas] ${result.areaCount}`);
       console.log(`[combined-seed-restaurants] ${result.restaurantCount}`);
       console.log(`[combined-seed-categories] ${result.categoryCount}`);
+      console.log(`[combined-seed-menu-items] ${result.menuItemCount}`);
       console.log(`[combined-seed-duplicates] ${result.duplicateCount}`);
       console.log(`[combined-seed-menu-mapped] ${result.menuMappedCount}`);
       console.log(`[saved-restaurants-preview] ${result.restaurantsPreviewPath}`);
       console.log(
         `[saved-restaurant-categories-preview] ${result.categoriesPreviewPath}`
       );
+      console.log(
+        `[saved-restaurant-menu-items-preview] ${result.menuItemsPreviewPath}`
+      );
       console.log(`[saved-tags-preview] ${result.tagsPreviewPath}`);
       console.log(
         `[saved-restaurant-tags-preview] ${result.restaurantTagsPreviewPath}`
+      );
+      console.log(
+        `[saved-tag-validation-report] ${result.tagValidationReportPath}`
       );
       console.log(`[saved-duplicates] ${result.duplicatesPath}`);
       console.log(`[saved-summary] ${result.summaryPath}`);
@@ -47,15 +54,22 @@ async function main() {
       console.log(`[combined-seed-areas] ${result.areaCount}`);
       console.log(`[combined-seed-restaurants] ${result.restaurantCount}`);
       console.log(`[combined-seed-categories] ${result.categoryCount}`);
+      console.log(`[combined-seed-menu-items] ${result.menuItemCount}`);
       console.log(`[combined-seed-duplicates] ${result.duplicateCount}`);
       console.log(`[combined-seed-menu-mapped] ${result.menuMappedCount}`);
       console.log(`[saved-restaurants-preview] ${result.restaurantsPreviewPath}`);
       console.log(
         `[saved-restaurant-categories-preview] ${result.categoriesPreviewPath}`
       );
+      console.log(
+        `[saved-restaurant-menu-items-preview] ${result.menuItemsPreviewPath}`
+      );
       console.log(`[saved-tags-preview] ${result.tagsPreviewPath}`);
       console.log(
         `[saved-restaurant-tags-preview] ${result.restaurantTagsPreviewPath}`
+      );
+      console.log(
+        `[saved-tag-validation-report] ${result.tagValidationReportPath}`
       );
       console.log(`[saved-duplicates] ${result.duplicatesPath}`);
       console.log(`[saved-summary] ${result.summaryPath}`);

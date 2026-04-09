@@ -13,7 +13,14 @@ const {
 const {
   buildRestaurantTagPreview,
   buildTagSourceFromStore,
+  resolvePrimaryMenuTag,
 } = require("./tag_extractor");
+const {
+  buildMenuPayload,
+  buildNormalizedMenuBase,
+  toNullableNumber,
+} = require("./menu_normalizer");
+const { buildRegionSchema } = require("./region_utils");
 const { saveJson, sanitizeText } = require("./utils");
 
 const ALLOWED_ADMIN_AREAS = resolveRequestedAreaNames(process.env.SEED_ADMIN_AREAS);
@@ -42,7 +49,7 @@ const FOOD_CATEGORY_KEYWORDS = [
   "추어탕",
   "초밥",
   "롤",
-  "스시",
+  "도시락",
   "치킨",
   "피자",
   "햄버거",
@@ -59,28 +66,23 @@ const FOOD_CATEGORY_KEYWORDS = [
   "맥주",
   "이자카야",
   "바",
-  "와플",
   "쌀국수",
   "마라탕",
   "마라",
-  "분짜",
+  "부자",
   "파스타",
   "뷔페",
-  "한정식",
-  "족발",
+  "도시락",
+  "조개",
   "보쌈",
   "복어",
-  "조개",
-  "쭈꾸미",
-  "닭갈비",
-  "닭발",
+  "낙지",
   "육회",
   "순대",
   "순댓국",
   "김밥",
   "떡볶이",
-  "초밥뷔페",
-  "테이크아웃커피",
+  "와플",
 ];
 
 const BLOCKED_CATEGORY_KEYWORDS = [
@@ -94,24 +96,22 @@ const BLOCKED_CATEGORY_KEYWORDS = [
   "마트",
   "생활용품",
   "편의점",
-  "가전",
+  "가구",
   "의류",
   "인테리어",
-  "사무용품",
   "반려동물",
   "자동차",
-  "휴대폰",
-  "헬스장",
-  "필라테스",
-  "학원",
-  "독서실",
+  "대리점",
+  "플라워",
+  "병원",
+  "입시",
   "키즈카페",
   "실내놀이터",
 ];
 
 function printHelp() {
   console.log(`
-NAVER_API_TEST
+Naver Seed
 
 Usage
   node src/index.js
@@ -130,7 +130,7 @@ Role
 Area config
   - Edit only: src/seed_config.js
   - Permanent area list: RAW_AREA_CONFIGS
-  - Temporary area override: SEED_ADMIN_AREAS=마평동,고림동
+  - Temporary area override: SEED_ADMIN_AREAS=역북동,망포동
 
 Seed scope
   Source: pcmap
@@ -161,89 +161,8 @@ function buildAddressText(...values) {
     .join(" ");
 }
 
-function findAddressToken(values, pattern) {
-  for (const value of values.map((item) => sanitizeText(item)).filter(Boolean)) {
-    const matchedTokens = value
-      .split(/\s+/)
-      .filter((token) => pattern.test(token));
-
-    if (matchedTokens.length > 0) {
-      return sanitizeText(matchedTokens.at(-1));
-    }
-  }
-
-  return "";
-}
-
-function extractDistrictFromText(...values) {
-  return findAddressToken(values, /[가-힣]+구$/);
-}
-
-function extractCityFromText(...values) {
-  return findAddressToken(values, /[가-힣]+시$/);
-}
-
-function extractCountyFromText(...values) {
-  return findAddressToken(values, /[가-힣]+군$/);
-}
-
-function extractLocalAreaFromText(...values) {
-  return findAddressToken(values, /[가-힣0-9]+(동|읍|면|리|가)$/);
-}
-
-function buildRegionFilterNames(...values) {
-  const city = extractCityFromText(...values);
-  const county = extractCountyFromText(...values);
-  const district = extractDistrictFromText(...values);
-
-  if (county) {
-    return [county];
-  }
-
-  return Array.from(new Set([city, district].filter(Boolean)));
-}
-
-function buildRegionSchema(adminArea, ...values) {
-  const city = extractCityFromText(...values);
-  const county = extractCountyFromText(...values);
-  const district = extractDistrictFromText(...values);
-  const regionName = buildRegionName(adminArea, ...values);
-
-  return {
-    regionName,
-    regionCityName: city || null,
-    regionDistrictName: district || null,
-    regionCountyName: county || null,
-    regionFilterNames: buildRegionFilterNames(...values, regionName),
-  };
-}
-
 function detectAdminArea(...values) {
   return findMatchedArea(buildAddressText(...values), ALLOWED_ADMIN_AREAS);
-}
-
-function buildRegionName(adminArea, ...values) {
-  const city = extractCityFromText(...values);
-  const county = extractCountyFromText(...values);
-  const district = extractDistrictFromText(...values);
-
-  if (county) {
-    return county;
-  }
-
-  if (city && district) {
-    return `${city} ${district}`;
-  }
-
-  if (city) {
-    return city;
-  }
-
-  if (district) {
-    return district;
-  }
-
-  return sanitizeText(adminArea);
 }
 
 function isCandidateInAllowedArea(candidate) {
@@ -397,29 +316,6 @@ function isFoodPlace(candidate, placeData, menuItems) {
   return Array.isArray(menuItems) && menuItems.length > 0;
 }
 
-function buildMenuPayload(store) {
-  const menus = Array.isArray(store.menus) ? store.menus : [];
-
-  return {
-    source: "pcmap",
-    place_id: sanitizeText(store.placeId),
-    menu_count: menus.length,
-    menus: menus.map((menu, index) => ({
-      id: sanitizeText(menu?.id || menu?.raw?.id),
-      index: Number.isFinite(menu?.index) ? menu.index : index,
-      name: sanitizeText(menu?.name || menu?.raw?.name),
-      price_text: sanitizeText(menu?.price),
-      price_value: toNullableNumber(menu?.raw?.price ?? menu?.price),
-      description:
-        sanitizeText(menu?.description || menu?.raw?.description) || null,
-      recommend: Boolean(menu?.recommend ?? menu?.raw?.recommend),
-      images: Array.isArray(menu?.images)
-        ? menu.images.map((image) => sanitizeText(image)).filter(Boolean)
-        : [],
-    })),
-  };
-}
-
 function buildSeedStore(candidate, placeData, menuItems) {
   const adminArea =
     detectAdminArea(
@@ -537,6 +433,20 @@ function mergeStore(existing, incoming) {
       fallback.categoryCodeList
     ),
     adminArea: mergeText(preferred.adminArea, fallback.adminArea),
+    regionName: mergeText(preferred.regionName, fallback.regionName),
+    regionCityName: mergeText(preferred.regionCityName, fallback.regionCityName),
+    regionDistrictName: mergeText(
+      preferred.regionDistrictName,
+      fallback.regionDistrictName
+    ),
+    regionCountyName: mergeText(
+      preferred.regionCountyName,
+      fallback.regionCountyName
+    ),
+    regionFilterNames: mergeArray(
+      preferred.regionFilterNames,
+      fallback.regionFilterNames
+    ),
     address: mergeText(preferred.address, fallback.address),
     roadAddress: mergeText(preferred.roadAddress, fallback.roadAddress),
     fullAddress: mergeText(preferred.fullAddress, fallback.fullAddress),
@@ -675,16 +585,6 @@ async function collectSeedStores(candidates) {
   };
 }
 
-function toNullableNumber(value) {
-  const text = sanitizeText(value);
-  if (!text) {
-    return null;
-  }
-
-  const number = Number(text);
-  return Number.isFinite(number) ? number : null;
-}
-
 function buildRestaurantSeedRows(stores) {
   return stores.map((store, index) => {
     const regionSchema = buildRegionSchema(
@@ -694,6 +594,7 @@ function buildRestaurantSeedRows(stores) {
       store.roadAddress,
       store.regionName
     );
+    const menuPayload = buildMenuPayload(Array.isArray(store.menus) ? store.menus : []);
 
     return {
       seed_index: index + 1,
@@ -723,7 +624,11 @@ function buildRestaurantSeedRows(stores) {
           : regionSchema.regionFilterNames,
       updated_at: "NOW()",
       pcmap_place_id: sanitizeText(store.placeId) || null,
-      menu_json: buildMenuPayload(store),
+      menu_json: {
+        source: "pcmap",
+        place_id: sanitizeText(store.placeId) || null,
+        ...menuPayload,
+      },
       menu_updated_at: "NOW()",
     };
   });
@@ -739,9 +644,42 @@ function buildRestaurantCategorySeedRows(stores) {
   }));
 }
 
+function buildRestaurantMenuItemSeedRows(stores) {
+  return stores.flatMap((store, storeIndex) =>
+    (Array.isArray(store.menus) ? store.menus : [])
+      .map((menu, menuIndex) => {
+        const normalizedMenu = buildNormalizedMenuBase(menu, menuIndex);
+        if (!normalizedMenu) {
+          return null;
+        }
+
+        const primaryMenuTag = resolvePrimaryMenuTag(normalizedMenu.menuName);
+
+        return {
+          seed_index: `${storeIndex + 1}-${menuIndex + 1}`,
+          restaurant_seed_index: storeIndex + 1,
+          display_order: normalizedMenu.displayOrder,
+          source_menu_id: normalizedMenu.sourceMenuId,
+          menu_name: normalizedMenu.menuName,
+          normalized_menu_name: primaryMenuTag
+            ? primaryMenuTag.tagName
+            : normalizedMenu.menuName,
+          menu_tag_key: primaryMenuTag ? primaryMenuTag.tagKey : null,
+          price_text: normalizedMenu.priceText,
+          price_value: normalizedMenu.priceValue,
+          description: normalizedMenu.description,
+          created_at: "NOW()",
+          updated_at: "NOW()",
+        };
+      })
+      .filter(Boolean)
+  );
+}
+
 function buildDatabaseSeedPreview(stores) {
   const restaurants = buildRestaurantSeedRows(stores);
   const restaurantCategories = buildRestaurantCategorySeedRows(stores);
+  const restaurantMenuItems = buildRestaurantMenuItemSeedRows(stores);
   const tagPreview = buildRestaurantTagPreview(
     stores.map((store, index) => buildTagSourceFromStore(store, index + 1))
   );
@@ -749,8 +687,10 @@ function buildDatabaseSeedPreview(stores) {
   return {
     restaurants,
     restaurantCategories,
+    restaurantMenuItems,
     tags: tagPreview.tags,
     restaurantTags: tagPreview.restaurantTags,
+    tagValidationReport: tagPreview.validationReport,
   };
 }
 
@@ -784,7 +724,14 @@ async function runSeedPipeline() {
     storeCount: seedStoreCollection.stores.length,
     skipped: seedStoreCollection.skipped,
     stores: seedStoreCollection.stores,
-    databaseSeedPreview,
+    databaseSeedPreview: {
+      restaurantCount: databaseSeedPreview.restaurants.length,
+      restaurantCategoryCount: databaseSeedPreview.restaurantCategories.length,
+      restaurantMenuItemCount: databaseSeedPreview.restaurantMenuItems.length,
+      tagCount: databaseSeedPreview.tags.length,
+      restaurantTagCount: databaseSeedPreview.restaurantTags.length,
+      tagValidationReport: databaseSeedPreview.tagValidationReport,
+    },
   };
 
   const summaryPath = saveJson(
@@ -799,6 +746,10 @@ async function runSeedPipeline() {
     withOutputPrefix("restaurant-categories-seed-preview.json"),
     databaseSeedPreview.restaurantCategories
   );
+  const restaurantMenuItemsSeedPath = saveJson(
+    withOutputPrefix("restaurant-menu-items-seed-preview.json"),
+    databaseSeedPreview.restaurantMenuItems
+  );
   const tagsSeedPath = saveJson(
     withOutputPrefix("tags-seed-preview.json"),
     databaseSeedPreview.tags
@@ -807,6 +758,10 @@ async function runSeedPipeline() {
     withOutputPrefix("restaurant-tags-seed-preview.json"),
     databaseSeedPreview.restaurantTags
   );
+  const tagValidationReportPath = saveJson(
+    withOutputPrefix("tag-validation-report.json"),
+    databaseSeedPreview.tagValidationReport
+  );
 
   console.log(`[seed-stores] selected=${seedStoreCollection.stores.length}`);
   console.log(`[saved-summary] ${summaryPath}`);
@@ -814,8 +769,12 @@ async function runSeedPipeline() {
   console.log(
     `[saved-restaurant-categories-preview] ${restaurantCategoriesSeedPath}`
   );
+  console.log(
+    `[saved-restaurant-menu-items-preview] ${restaurantMenuItemsSeedPath}`
+  );
   console.log(`[saved-tags-preview] ${tagsSeedPath}`);
   console.log(`[saved-restaurant-tags-preview] ${restaurantTagsSeedPath}`);
+  console.log(`[saved-tag-validation-report] ${tagValidationReportPath}`);
 }
 
 module.exports = {
