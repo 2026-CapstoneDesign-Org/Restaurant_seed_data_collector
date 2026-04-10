@@ -9,7 +9,7 @@ const { sanitizeText } = require("./utils");
 //
 // When the address text may contain another administrative name,
 // put that alternate name into aliases.
-const RAW_AREA_CONFIGS = ["삼가동", "남동", "김량장동", "서리"];
+const RAW_AREA_CONFIGS = ["역북동", "삼가동", "남동", "김량장동", "서리"];
 
 const DEFAULT_SEARCH_KEYWORDS = [
   "한식",

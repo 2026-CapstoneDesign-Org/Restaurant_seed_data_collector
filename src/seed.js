@@ -107,7 +107,87 @@ const BLOCKED_CATEGORY_KEYWORDS = [
   "입시",
   "키즈카페",
   "실내놀이터",
+  "조립식건축",
+  "조립식",
+  "건축자재",
+  "건물해체",
+  "해체공사",
+  "중고가전",
+  "식료품제조",
+  "육류가공",
+  "제조",
+  "가공",
+  "주방기구",
+  "주방집기",
+  "폐기물",
+  "영화관",
+  "명함인쇄",
+  "장소대여",
+  "애견훈련",
 ];
+
+const BLOCKED_PLACE_NAME_KEYWORDS = [
+  "판넬",
+  "패널",
+  "칸막이",
+  "공사",
+  "철거",
+  "방수",
+  "석고",
+  "텍스",
+  "데코타일",
+  "조립식",
+  "원상복구",
+  "집기매입",
+  "주방기구",
+  "주방집기",
+  "폐기물",
+];
+
+const BLOCKED_MENU_RAW_TYPES = new Set([
+  "BusStation",
+  "InnerRoute",
+  "BusinessTool",
+  "SubwayStation",
+  "SubwayStationInfo",
+  "RelatedLink",
+  "FsasReview",
+  "InformationFacilities",
+  "NewBusinessHour",
+  "RestaurantSeatItems",
+]);
+
+const BLOCKED_MENU_NAME_KEYWORDS = [
+  "스마트콜",
+  "에버라인",
+  "정류장",
+  "후문",
+  "아파트",
+  "마을회관",
+  "시장약국",
+  "헌혈의집",
+  "급행",
+  "거점",
+  "예약",
+];
+
+const MANUALLY_BLOCKED_PLACE_NAMES = new Set([
+  "명지카페",
+  "막퍼주는 팔팔수산물 직판장",
+]);
+const MANUALLY_CONFIRMED_RESTAURANT_PLACE_IDS = new Set([
+  "1627681710",
+  "2008487933",
+  "1574215759",
+  "1920563237",
+  "1903159052",
+  "1009678477",
+  "36448174",
+  "1435440737",
+  "2082239866",
+  "1812358468",
+  "1437315652",
+]);
 
 function printHelp() {
   console.log(`
@@ -278,6 +358,15 @@ function buildCategoryText(candidate, placeData) {
     .join(" ");
 }
 
+function buildPlaceNameText(candidate, placeData) {
+  return [
+    sanitizeText(placeData?.name),
+    sanitizeText(candidate?.name),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function hasBlockedCategorySignal(candidate, placeData) {
   return hasKeywordMatch(
     buildCategoryText(candidate, placeData),
@@ -292,6 +381,115 @@ function hasFoodCategorySignal(candidate, placeData) {
   );
 }
 
+function hasBlockedPlaceNameSignal(candidate, placeData) {
+  return hasKeywordMatch(
+    buildPlaceNameText(candidate, placeData),
+    BLOCKED_PLACE_NAME_KEYWORDS
+  );
+}
+
+function hasManualBlockedPlaceNameSignal(candidate, placeData) {
+  return MANUALLY_BLOCKED_PLACE_NAMES.has(
+    sanitizeText(placeData?.name || candidate?.name)
+  );
+}
+
+function hasAlphaOrHangul(text) {
+  return /[가-힣A-Za-z]/.test(sanitizeText(text));
+}
+
+function isDigitsOnlyText(text) {
+  const normalized = sanitizeText(text).replace(/\s+/g, "");
+  return Boolean(normalized) && /^\d[\d.-]*$/.test(normalized);
+}
+
+function isReliableFoodMenuItem(menuItem) {
+  const menuName = sanitizeText(menuItem?.name);
+  if (!menuName) {
+    return false;
+  }
+
+  if (!hasAlphaOrHangul(menuName)) {
+    return false;
+  }
+
+  if (isDigitsOnlyText(menuName)) {
+    return false;
+  }
+
+  if (
+    BLOCKED_MENU_NAME_KEYWORDS.some((keyword) => menuName.includes(keyword))
+  ) {
+    return false;
+  }
+
+  const rawTypeName = sanitizeText(menuItem?.raw?.__typename);
+  if (BLOCKED_MENU_RAW_TYPES.has(rawTypeName)) {
+    return false;
+  }
+
+  if (sanitizeText(menuItem?.price)) {
+    return true;
+  }
+
+  if (resolvePrimaryMenuTag(menuName)) {
+    return true;
+  }
+
+  return hasKeywordMatch(menuName, FOOD_CATEGORY_KEYWORDS);
+}
+
+function getReliableFoodMenuCount(menuItems) {
+  return (menuItems || []).filter((menuItem) => isReliableFoodMenuItem(menuItem))
+    .length;
+}
+
+function buildMenuDiagnostics(menuItems) {
+  const items = Array.isArray(menuItems) ? menuItems : [];
+  let reliableFoodMenuCount = 0;
+  let pricedMenuCount = 0;
+  let blockedRawTypeCount = 0;
+  let blockedNameCount = 0;
+  let digitOnlyNameCount = 0;
+
+  for (const menuItem of items) {
+    const menuName = sanitizeText(menuItem?.name);
+    const rawTypeName = sanitizeText(menuItem?.raw?.__typename);
+
+    if (isReliableFoodMenuItem(menuItem)) {
+      reliableFoodMenuCount += 1;
+    }
+
+    if (sanitizeText(menuItem?.price)) {
+      pricedMenuCount += 1;
+    }
+
+    if (BLOCKED_MENU_RAW_TYPES.has(rawTypeName)) {
+      blockedRawTypeCount += 1;
+    }
+
+    if (
+      menuName &&
+      BLOCKED_MENU_NAME_KEYWORDS.some((keyword) => menuName.includes(keyword))
+    ) {
+      blockedNameCount += 1;
+    }
+
+    if (isDigitsOnlyText(menuName)) {
+      digitOnlyNameCount += 1;
+    }
+  }
+
+  return {
+    menuCount: items.length,
+    reliableFoodMenuCount,
+    pricedMenuCount,
+    blockedRawTypeCount,
+    blockedNameCount,
+    digitOnlyNameCount,
+  };
+}
+
 function isFoodPlace(candidate, placeData, menuItems) {
   if (!candidate && !placeData) {
     return false;
@@ -301,9 +499,19 @@ function isFoodPlace(candidate, placeData, menuItems) {
     return false;
   }
 
+  if (hasBlockedPlaceNameSignal(candidate, placeData)) {
+    return false;
+  }
+
+  if (hasManualBlockedPlaceNameSignal(candidate, placeData)) {
+    return false;
+  }
+
   const businessType = sanitizeText(
     placeData?.missingInfo?.businessType
   ).toLowerCase();
+  const menuDiagnostics = buildMenuDiagnostics(menuItems);
+  const reliableFoodMenuCount = menuDiagnostics.reliableFoodMenuCount;
 
   if (businessType === "restaurant") {
     return true;
@@ -313,7 +521,55 @@ function isFoodPlace(candidate, placeData, menuItems) {
     return true;
   }
 
-  return Array.isArray(menuItems) && menuItems.length > 0;
+  return reliableFoodMenuCount > 0;
+}
+
+function buildManualReviewCandidates(stores) {
+  return (stores || [])
+    .map((store) => {
+      const placeId = sanitizeText(store?.placeId);
+      const menuDiagnostics = buildMenuDiagnostics(store?.menus);
+      const businessType = sanitizeText(store?.businessType).toLowerCase();
+
+      if (MANUALLY_CONFIRMED_RESTAURANT_PLACE_IDS.has(placeId)) {
+        return null;
+      }
+
+      if (menuDiagnostics.menuCount === 0) {
+        return null;
+      }
+
+      if (menuDiagnostics.reliableFoodMenuCount > 0) {
+        return null;
+      }
+
+      return {
+        place_id: placeId,
+        name: sanitizeText(store?.name),
+        category: sanitizeText(store?.category),
+        business_type: businessType || null,
+        address: sanitizeText(store?.address || store?.fullAddress),
+        matched_queries: Array.isArray(store?.matchedQueries)
+          ? store.matchedQueries
+          : [],
+        menu_diagnostics: menuDiagnostics,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      const rightRiskScore =
+        right.menu_diagnostics.menuCount +
+        right.menu_diagnostics.blockedRawTypeCount * 5;
+      const leftRiskScore =
+        left.menu_diagnostics.menuCount +
+        left.menu_diagnostics.blockedRawTypeCount * 5;
+
+      if (rightRiskScore !== leftRiskScore) {
+        return rightRiskScore - leftRiskScore;
+      }
+
+      return left.name.localeCompare(right.name, "ko");
+    });
 }
 
 function buildSeedStore(candidate, placeData, menuItems) {
@@ -486,7 +742,23 @@ async function collectSeedCandidates() {
   const searchReports = [];
 
   for (const query of queries) {
-    const searchResult = await searchPlaces(query);
+    let searchResult;
+    try {
+      searchResult = await searchPlaces(query);
+    } catch (error) {
+      searchReports.push({
+        query,
+        pageCount: 0,
+        totalAvailable: 0,
+        totalCandidates: 0,
+        acceptedCandidates: 0,
+        failed: true,
+        errorMessage: error.message,
+        pageReports: [],
+      });
+      continue;
+    }
+
     const filteredCandidates = searchResult.candidates.filter(
       isCandidateInAllowedArea
     );
@@ -520,7 +792,19 @@ async function collectSeedStores(candidates) {
   const skipped = [];
 
   for (const candidate of candidates) {
-    const detailResult = await fetchPlaceDetail(candidate.placeId);
+    let detailResult;
+    try {
+      detailResult = await fetchPlaceDetail(candidate.placeId);
+    } catch (error) {
+      skipped.push({
+        placeId: candidate.placeId,
+        name: candidate.name,
+        reason: "detail-fetch-failed",
+        errorMessage: error.message,
+      });
+      continue;
+    }
+
     const menuItems =
       detailResult.placeData?.menus?.length > 0
         ? detailResult.placeData.menus
@@ -594,7 +878,10 @@ function buildRestaurantSeedRows(stores) {
       store.roadAddress,
       store.regionName
     );
-    const menuPayload = buildMenuPayload(Array.isArray(store.menus) ? store.menus : []);
+    const menuPayload = buildMenuPayload(
+      Array.isArray(store.menus) ? store.menus : [],
+      { placeName: store.name }
+    );
 
     return {
       seed_index: index + 1,
@@ -648,7 +935,9 @@ function buildRestaurantMenuItemSeedRows(stores) {
   return stores.flatMap((store, storeIndex) =>
     (Array.isArray(store.menus) ? store.menus : [])
       .map((menu, menuIndex) => {
-        const normalizedMenu = buildNormalizedMenuBase(menu, menuIndex);
+        const normalizedMenu = buildNormalizedMenuBase(menu, menuIndex, {
+          placeName: store.name,
+        });
         if (!normalizedMenu) {
           return null;
         }
@@ -713,6 +1002,9 @@ async function runSeedPipeline() {
   const databaseSeedPreview = buildDatabaseSeedPreview(
     seedStoreCollection.stores
   );
+  const manualReviewCandidates = buildManualReviewCandidates(
+    seedStoreCollection.stores
+  );
 
   const summary = {
     source: "pcmap",
@@ -768,6 +1060,16 @@ async function runSeedPipeline() {
     withOutputPrefix("tag-candidate-report.json"),
     databaseSeedPreview.tagCandidateReport
   );
+  const manualReviewCandidatesPath = saveJson(
+    withOutputPrefix("manual-review-candidates.json"),
+    {
+      generated_at: new Date().toISOString(),
+      area_names: ALLOWED_ADMIN_AREAS,
+      candidate_count: manualReviewCandidates.length,
+      manually_blocked_place_names: Array.from(MANUALLY_BLOCKED_PLACE_NAMES),
+      candidates: manualReviewCandidates,
+    }
+  );
 
   console.log(`[seed-stores] selected=${seedStoreCollection.stores.length}`);
   console.log(`[saved-summary] ${summaryPath}`);
@@ -782,6 +1084,7 @@ async function runSeedPipeline() {
   console.log(`[saved-restaurant-tags-preview] ${restaurantTagsSeedPath}`);
   console.log(`[saved-tag-validation-report] ${tagValidationReportPath}`);
   console.log(`[saved-tag-candidate-report] ${tagCandidateReportPath}`);
+  console.log(`[saved-manual-review-candidates] ${manualReviewCandidatesPath}`);
 }
 
 module.exports = {

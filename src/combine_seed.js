@@ -222,6 +222,26 @@ function isRestaurantRowInConfiguredArea(restaurantRow) {
   );
 }
 
+function buildConfiguredAreaDistribution(restaurants) {
+  const configuredAreaNames = getConfiguredAreaNames();
+  const counts = Object.fromEntries(
+    configuredAreaNames.map((areaName) => [areaName, 0])
+  );
+
+  for (const restaurantRow of restaurants || []) {
+    const matchedArea = findMatchedArea(
+      restaurantRow?.address,
+      configuredAreaNames
+    );
+
+    if (matchedArea) {
+      counts[matchedArea] += 1;
+    }
+  }
+
+  return counts;
+}
+
 function buildRestaurantQualityScore(restaurantRow) {
   const menuCount = Array.isArray(restaurantRow?.menu_json?.menus)
     ? restaurantRow.menu_json.menus.length
@@ -237,13 +257,15 @@ function buildRestaurantQualityScore(restaurantRow) {
 }
 
 function buildSimplifiedMenuPayload(restaurantRow, store) {
-  const rawMenus = Array.isArray(restaurantRow?.menu_json?.menus)
-    ? restaurantRow.menu_json.menus
-    : Array.isArray(store?.menus)
+  const rawMenus = Array.isArray(store?.menus)
     ? store.menus
+    : Array.isArray(restaurantRow?.menu_json?.menus)
+    ? restaurantRow.menu_json.menus
     : [];
 
-  const payload = buildMenuPayload(rawMenus);
+  const payload = buildMenuPayload(rawMenus, {
+    placeName: sanitizeText(restaurantRow?.name || store?.name),
+  });
 
   return {
     source: sanitizeText(restaurantRow?.menu_json?.source || "pcmap"),
@@ -341,7 +363,9 @@ function buildCombinedRestaurantMenuItems(normalizedRows) {
   return normalizedRows.flatMap((item, index) =>
     (Array.isArray(item.row?.menu_json?.menus) ? item.row.menu_json.menus : [])
       .map((menu, menuIndex) => {
-        const normalizedMenu = buildNormalizedMenuBase(menu, menuIndex);
+        const normalizedMenu = buildNormalizedMenuBase(menu, menuIndex, {
+          placeName: item.row?.name,
+        });
         if (!normalizedMenu) {
           return null;
         }
@@ -493,6 +517,11 @@ function runCombineSeedPreviewExport() {
     generated_at: new Date().toISOString(),
     area_count: combined.areaNames.length,
     area_names: combined.areaNames,
+    configured_area_count: getConfiguredAreaNames().length,
+    configured_area_names: getConfiguredAreaNames(),
+    configured_area_distribution: buildConfiguredAreaDistribution(
+      combined.restaurants
+    ),
     restaurant_count: combined.restaurants.length,
     category_count: combined.restaurantCategories.length,
     menu_item_count: combined.restaurantMenuItems.length,

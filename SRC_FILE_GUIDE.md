@@ -103,7 +103,7 @@ index.js
 
 현재 기준:
 
-- 활성 지역: `삼가동`, `남동`, `김량장동`, `서리`
+- 활성 지역: `역북동`, `삼가동`, `남동`, `김량장동`, `서리`
 
 ### `src/seed.js`
 
@@ -131,18 +131,21 @@ index.js
 - `restaurant-tags-seed-preview.json`
 - `tag-validation-report.json`
 - `tag-candidate-report.json`
+- `manual-review-candidates.json`
 
 이 파일을 수정해야 하는 경우:
 
 - 수집 후보 필터링 로직을 바꿀 때
 - preview 스키마를 바꿀 때
 - output 파일을 추가할 때
+- 수동 exact block 목록을 갱신할 때
 
 현재 핵심 규칙:
 
 - region은 `시 + 구` 또는 `군 단독`으로 정규화
 - 메뉴 이미지는 버리고 `name/price_text/price_value/description`만 유지
 - 태그는 메뉴 기반만 생성
+- 수동 검수 exact block과 review 후보 리포트를 함께 만든다
 
 ### `src/combine_seed.js`
 

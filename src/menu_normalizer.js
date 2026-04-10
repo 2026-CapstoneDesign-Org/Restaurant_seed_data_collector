@@ -1,6 +1,37 @@
 const { sanitizeText } = require("./utils");
 
 const MAX_REASONABLE_MENU_PRICE = 10_000_000;
+const BLOCKED_MENU_RAW_TYPES = new Set([
+  "PlaceDetailBase",
+  "BusStation",
+  "InnerRoute",
+  "BusinessTool",
+  "SubwayStation",
+  "SubwayStationInfo",
+  "RelatedLink",
+  "FsasReview",
+  "InformationFacilities",
+  "NewBusinessHour",
+  "RestaurantSeatItems",
+  "UgcImage",
+]);
+const BLOCKED_MENU_NAME_KEYWORDS = [
+  "스마트콜",
+  "에버라인",
+  "정류장",
+  "후문",
+  "아파트",
+  "마을회관",
+  "시장약국",
+  "헌혈의집",
+  "급행",
+  "거점",
+  "예약",
+  "식신",
+  "다이닝코드",
+  "네이버 주문",
+  "네이버예약",
+];
 
 function toNullableNumber(value) {
   const normalized = String(value ?? "").replace(/[^\d.]/g, "");
@@ -28,9 +59,61 @@ function normalizeMenuName(value) {
     .trim();
 }
 
-function buildNormalizedMenuBase(menu, index) {
+function hasAlphaOrHangul(text) {
+  return /[가-힣A-Za-z]/.test(sanitizeText(text));
+}
+
+function isDigitsOnlyText(text) {
+  const normalized = sanitizeText(text).replace(/\s+/g, "");
+  return Boolean(normalized) && /^\d[\d.-]*$/.test(normalized);
+}
+
+function shouldKeepMenu(menu, normalizedMenuName, options = {}) {
+  const rawTypeName = sanitizeText(menu?.raw?.__typename);
+  const placeName = normalizeMenuName(options.placeName);
+  const priceText =
+    sanitizeText(menu?.price_text || menu?.price || menu?.raw?.price) || "";
+  const description =
+    sanitizeText(menu?.description || menu?.raw?.description) || "";
+
+  if (!normalizedMenuName) {
+    return false;
+  }
+
+  if (!hasAlphaOrHangul(normalizedMenuName)) {
+    return false;
+  }
+
+  if (isDigitsOnlyText(normalizedMenuName)) {
+    return false;
+  }
+
+  if (BLOCKED_MENU_RAW_TYPES.has(rawTypeName)) {
+    return false;
+  }
+
+  if (
+    BLOCKED_MENU_NAME_KEYWORDS.some((keyword) =>
+      normalizedMenuName.includes(keyword)
+    )
+  ) {
+    return false;
+  }
+
+  if (placeName && normalizedMenuName === placeName) {
+    return false;
+  }
+
+  if (!priceText && !description && normalizedMenuName.length <= 1) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildNormalizedMenuBase(menu, index, options = {}) {
   const menuName = normalizeMenuName(menu?.name || menu?.raw?.name);
-  if (!menuName) {
+  if (!shouldKeepMenu(menu, menuName, options)) {
     return null;
   }
 
@@ -48,9 +131,9 @@ function buildNormalizedMenuBase(menu, index) {
   };
 }
 
-function buildMenuPayload(menus) {
+function buildMenuPayload(menus, options = {}) {
   const normalizedMenus = (menus || [])
-    .map((menu, index) => buildNormalizedMenuBase(menu, index))
+    .map((menu, index) => buildNormalizedMenuBase(menu, index, options))
     .filter(Boolean);
 
   return {
@@ -69,5 +152,6 @@ module.exports = {
   buildMenuPayload,
   buildNormalizedMenuBase,
   normalizeMenuName,
+  shouldKeepMenu,
   toNullableNumber,
 };
