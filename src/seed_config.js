@@ -9,7 +9,7 @@ const { sanitizeText } = require("./utils");
 //
 // When the address text may contain another administrative name,
 // put that alternate name into aliases.
-const RAW_AREA_CONFIGS = ["역북동", "삼가동", "남동", "김량장동", "서리"];
+const RAW_AREA_CONFIGS = ["삼가동", "남동", "김량장동", "서리"];
 
 const DEFAULT_SEARCH_KEYWORDS = [
   "한식",
@@ -88,6 +88,21 @@ function normalizeAreaName(value) {
   return sanitizeText(value);
 }
 
+function escapeRegExp(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildAreaTokenPattern(areaName) {
+  const normalizedAreaName = normalizeAreaName(areaName);
+  if (!normalizedAreaName) {
+    return null;
+  }
+
+  return new RegExp(
+    `(^|[\\s,./()\\[\\]{}-])${escapeRegExp(normalizedAreaName)}(?=$|[\\s,./()\\[\\]{}-])`
+  );
+}
+
 function findMatchedArea(text, requestedAreaNames = getConfiguredAreaNames()) {
   const normalizedText = sanitizeText(text);
   if (!normalizedText) {
@@ -103,11 +118,16 @@ function findMatchedArea(text, requestedAreaNames = getConfiguredAreaNames()) {
       continue;
     }
 
-    if (normalizedText.includes(areaConfig.name)) {
+    const areaPattern = buildAreaTokenPattern(areaConfig.name);
+    if (areaPattern?.test(normalizedText)) {
       return areaConfig.name;
     }
 
-    if (areaConfig.aliases.some((alias) => normalizedText.includes(alias))) {
+    if (
+      areaConfig.aliases.some((alias) =>
+        buildAreaTokenPattern(alias)?.test(normalizedText)
+      )
+    ) {
       return areaConfig.name;
     }
   }

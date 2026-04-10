@@ -1,5 +1,7 @@
 const { sanitizeText } = require("./utils");
 
+const MAX_REASONABLE_MENU_PRICE = 10_000_000;
+
 function toNullableNumber(value) {
   const normalized = String(value ?? "").replace(/[^\d.]/g, "");
   if (!normalized) {
@@ -7,7 +9,15 @@ function toNullableNumber(value) {
   }
 
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  if (parsed < 0 || parsed > MAX_REASONABLE_MENU_PRICE) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function normalizeMenuName(value) {

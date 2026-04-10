@@ -1,7 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 
-const { getAreaSortOrder, normalizeAreaName } = require("./seed_config");
+const {
+  findMatchedArea,
+  getAreaSortOrder,
+  getConfiguredAreaNames,
+  normalizeAreaName,
+} = require("./seed_config");
 const {
   buildRestaurantTagPreview,
   buildTagSourceFromRestaurantRow,
@@ -208,6 +213,15 @@ function normalizeCategoryName(value) {
   return sanitizeText(value) || "기타";
 }
 
+function isRestaurantRowInConfiguredArea(restaurantRow) {
+  return Boolean(
+    findMatchedArea(
+      restaurantRow?.address,
+      getConfiguredAreaNames()
+    )
+  );
+}
+
 function buildRestaurantQualityScore(restaurantRow) {
   const menuCount = Array.isArray(restaurantRow?.menu_json?.menus)
     ? restaurantRow.menu_json.menus.length
@@ -378,6 +392,11 @@ function buildCombinedSeedPreview() {
         pair.areaName,
         storesByPlaceId
       );
+
+      if (!isRestaurantRowInConfiguredArea(normalized.row)) {
+        continue;
+      }
+
       const existing = combinedByDedupKey.get(normalized.dedupKey);
 
       if (!existing) {
