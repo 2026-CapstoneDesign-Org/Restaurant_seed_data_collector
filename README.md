@@ -1,47 +1,39 @@
-# Naver Seed
+# Restaurant Seed Data Collector
 
-`Naver_seed`는 네이버 `pcmap` 기반 식당 seed 수집기다.
-이 저장소는 수집, 1차 정규화, preview JSON 생성까지만 담당하고 DB 적재는 `Capstone/Capstone`이 담당한다.
+네이버 pcmap 페이지 응답을 기반으로 Capstone 식당 seed preview JSON을 생성하는 수집기입니다.
 
-기준일: `2026-04-10`
-
-## 현재 기준
-
-현재 활성 지역:
-
-- `역북동`
-- `삼가동`
-- `남동`
-- `김량장동`
-- `서리`
-
-현재 최신 `seed:refresh` + `combine` 결과:
-
-- `restaurants`: `616`
-- `restaurant_categories`: `616`
-- `restaurant_menu_items`: `12822`
-- `tags`: `37`
-- `restaurant_tags`: `1072`
-
-지역별 식당 수:
-
-- `역북동`: `230`
-- `삼가동`: `74`
-- `남동`: `50`
-- `김량장동`: `224`
-- `서리`: `38`
+이 저장소는 수집, 정제, preview JSON 생성까지만 담당합니다. DB 적재와 서비스 API 동작은 `2026-CapstoneDesign` 백엔드 저장소에서 담당합니다.
 
 ## 역할 분리
 
-- `Naver_seed`
-  - `pcmap` 검색/상세 수집
-  - 메뉴, region, tag 1차 정규화
-  - import용 preview JSON 생성
-- `Capstone/Capstone`
+- `Restaurant_seed_data_collector`
+  - pcmap 검색 및 상세 데이터 수집
+  - 식당, 메뉴, 영업시간, 사진, 편의정보, 지역 필드 정규화
+  - 메뉴 기반 tag 후보와 `restaurant_tags` preview 생성
+  - Capstone import용 JSON 산출
+- `2026-CapstoneDesign`
   - preview JSON import
-  - `restaurants`, `restaurant_categories`, `restaurant_menu_items`, `tags`, `restaurant_tags` 반영
+  - DB schema와 서비스 API 운영
+  - 외부 fallback 식당의 검증 후 등록
 
-## 실행 명령
+Capstone 백엔드 내부에는 seed 원본 JSON을 커밋하지 않습니다. 필요한 경우 이 수집기에서 생성한 `output/*.json`을 실행 환경의 임시 `import-data/` 경로로 전달해 import합니다.
+
+## 요구사항
+
+- Node.js 18 이상 권장
+- npm
+- 네이버 pcmap 접근이 가능한 네트워크
+- 필요한 경우 `.env`에 pcmap 요청용 cookie 또는 실행 옵션 설정
+
+`.env.example`을 참고해 로컬 `.env`를 만들 수 있습니다. `.env`는 커밋하지 않습니다.
+
+## 설치
+
+```bash
+npm install
+```
+
+## 주요 명령
 
 ```bash
 npm run help
@@ -49,231 +41,121 @@ npm run seed:areas
 npm run seed
 npm run seed:combine
 npm run seed:refresh
+npm run test:tags
 ```
 
-설명:
+명령 설명:
 
 - `npm run seed:areas`
-  - 현재 활성 지역 출력
+  - 현재 수집 대상 지역 설정을 출력합니다.
 - `npm run seed`
-  - `pcmap` 재수집 후 `output/` 생성
+  - 지역별 pcmap 수집을 수행하고 `output/*-restaurants-seed-preview.json`, raw summary를 생성합니다.
 - `npm run seed:combine`
-  - 현재 `output/` 기준 generic preview 재생성
+  - 기존 `output/` 지역별 결과를 Capstone import용 공통 preview JSON으로 병합합니다.
 - `npm run seed:refresh`
-  - `seed`와 `combine` 연속 실행
+  - `seed` 실행 후 `combine`까지 연속 수행합니다.
+- `npm run test:tags`
+  - 메뉴 태그 추출 규칙 테스트를 실행합니다.
 
-## 수집 설정
+## 수집 지역 설정
 
-수집 지역은 [`src/seed_config.js`](./src/seed_config.js)의 `RAW_AREA_CONFIGS`만 수정하면 된다.
+수집 지역은 `src/seed_config.js`의 `RAW_AREA_CONFIGS`에서 관리합니다.
 
-현재 설정:
-
-```js
-const RAW_AREA_CONFIGS = ["역북동", "삼가동", "남동", "김량장동", "서리"];
-```
-
-새 지역 추가 예시:
+예시:
 
 ```js
 const RAW_AREA_CONFIGS = [
   "역북동",
-  "삼가동",
-  "남동",
   "김량장동",
-  "서리",
-  { name: "망포동", aliases: ["망포역"] },
+  { name: "마포구", aliases: ["마포"] },
 ];
 ```
 
-가이드:
+지역명을 바꾼 뒤에는 `npm run seed:refresh`로 수집과 병합을 다시 수행합니다.
 
-- 주소 문자열에 다른 행정명이 자주 섞이면 `aliases`를 같이 넣는다.
-- 지역을 바꿨으면 반드시 `npm run seed:refresh`를 다시 돌린다.
+## 산출물
 
-## region 규칙
+기본 산출물은 `output/` 아래에 생성됩니다.
 
-region은 동 기준이 아니라 `시/구/군` 기준으로 정규화한다.
+Capstone import 대상:
 
-- 시 + 구 주소
-  - `region_name = "{시} {구}"`
-  - 예: `용인시 처인구`
-- 군 주소
-  - `region_name = "{군}"`
-  - 예: `가평군`
+- `output/restaurants-seed-preview.json`
+- `output/restaurant-menu-items-seed-preview.json`
+- `output/tags-seed-preview.json`
+- `output/restaurant-tags-seed-preview.json`
 
-보조 필드:
+검증 및 운영 참고용:
 
+- `output/pcmap-area-seed-result.json`
+- `output/tag-validation-report.json`
+- `output/tag-candidate-report.json`
+- `output/manual-review-candidates.json`
+- `output/combined-seed-summary.json`
+- `output/combined-seed-duplicates.json`
+
+`output/`의 대용량 산출물은 기본적으로 git에 커밋하지 않습니다. 필요한 release 또는 전달 과정에서 별도 artifact로 관리합니다.
+
+## 정규화 정책
+
+### 지역
+
+지역은 단순 동 기준이 아니라 `시/군/구` 주소를 기준으로 정규화합니다.
+
+- `region_name`
 - `region_city_name`
 - `region_district_name`
 - `region_county_name`
 - `region_filter_names`
 
-제약:
+검색 aliases는 주소 표현 차이가 큰 지역에서 보조 키워드로 사용합니다.
 
-- `시`와 `구`는 같이 존재해야 한다.
-- `군`이 존재하면 `시`, `구`는 같이 저장되면 안 된다.
+### 메뉴
 
-## 메뉴 정규화 규칙
-
-메뉴 이미지는 저장하지 않는다.
-유지 필드는 아래 4개다.
+메뉴는 이미지 저장 없이 텍스트 기반으로 정규화합니다.
 
 - `name`
 - `price_text`
 - `price_value`
 - `description`
 
-정규화 결과는 두 곳에 들어간다.
+비정상적으로 큰 가격은 `price_text`는 보존하고 `price_value=null`로 처리합니다.
 
-- `restaurants-seed-preview.json`
-  - 간소화된 `menu_json`
-- `restaurant-menu-items-seed-preview.json`
-  - 메뉴 row 단위 정규화 결과
+### 태그
 
-추가 규칙:
-
-- 비정상적으로 큰 가격은 `price_text`만 남기고 `price_value`는 `null`
-- 검색/후처리는 `menu_json`보다 `restaurant-menu-items-seed-preview.json`을 우선 사용
-
-## 태그 정책
-
-태그는 `menu` 기반만 사용한다.
+태그는 메뉴 기반 규칙만 사용합니다.
 
 - `tags.tag_type = MENU`
 - `restaurant_tags.source_type = MENU`
-- `parent_tag_key`도 현재 정책상 `menu:`만 사용
+- `parent_tag_key`는 `menu:` prefix 계층만 사용합니다.
+
+새 태그 후보는 자동 확정하지 않고 `output/tag-candidate-report.json`으로 검토합니다. 실제 태그 확정은 `src/tag_extractor.js`의 `MENU_TAG_RULES`를 수정해 반영합니다.
+
+### 음식점 검증
+
+수집기는 다음 단계를 거쳐 non-food 후보를 제외합니다.
+
+1. pcmap category 기반 1차 제외
+2. 상호명 금지 키워드 기반 2차 제외
+3. 메뉴 raw type 기반 음식점 신호 확인
+4. 수동 exact block 적용
+5. manual review 후보 분리
+
+## Capstone import 흐름
+
+1. 이 저장소에서 `npm run seed:refresh`를 실행합니다.
+2. `output/`의 import 대상 JSON 4개를 검증합니다.
+3. Capstone 실행 환경의 임시 `import-data/` 경로에 전달합니다.
+4. Capstone에서 seed import runner를 실행합니다.
 
 예시:
 
-- `수제 안심 카츠동` -> `카츠동`
-- `숙성 연어 초밥` -> `초밥`
-- `순대국밥` -> `국밥`
-
-중요:
-
-- `tags`는 자동 증식 대상이 아니다.
-- `restaurant_tags`는 매 수집 때 다시 계산되는 파생 결과다.
-- 신규 태그 후보는 `output/tag-candidate-report.json`으로만 보고, 실제 태그 승격은 `src/tag_extractor.js`의 `MENU_TAG_RULES` 수정으로만 한다.
-
-## non-food 검증 규칙
-
-현재 수집기에서는 아래 과정을 거친다.
-
-1. 카테고리 기반 1차 제외
-2. 상호명 키워드 기반 2차 제외
-3. 메뉴 raw type 기반 신뢰도 검사
-4. 수동 검수 후 exact block 적용
-
-현재 수동 exact block:
-
-- `명지카페`
-- `막퍼주는 팔팔수산물 직판장`
-
-이번 검수에서 제외된 대표 오탐:
-
-- `한신판넬샌드위치판넬칸막이공사조립식판넬`
-- `샌드위치판넬경량칸막이천장방수SMC석고텍스철거방음데코타일ALC`
-- `CGV 드라이브인 용인크랙사이드`
-- `아이엠지`
-- `파티룸 르모먼트 스튜디오`
-
-## manual review 후보
-
-자동 제외까지는 하지 않았지만 메뉴 신뢰도가 낮은 식당은 `output/manual-review-candidates.json`으로 별도 저장한다.
-
-용도:
-
-- 메뉴가 버스 노선/지하철/안내 정보로만 파싱된 매장 재검수
-- 다음 수집 전 exact block 또는 규칙 추가 판단
-
-현재 최신 결과:
-
-- `manual_review_candidate_count`: `0`
-- `confirmed_restaurant_place_ids`: `11`
-
-설명:
-
-- 기존 review 후보 11건은 직접 검수 후 정상 음식점으로 확정했다.
-- 다만 이 중 일부는 `pcmap` 메뉴 응답이 버스/지하철/리뷰 텍스트로만 들어와서, 식당은 유지하고 메뉴는 빈 배열로 정제했다.
-- 즉 `restaurants`에는 적재되지만 `restaurant_menu_items`는 `0`건일 수 있다.
-
-## output 파일
-
-기본 결과물은 `output/` 아래에 생성된다.
-
-- `pcmap-area-seed-result.json`
-  - 수집 summary와 raw store payload
-- `restaurants-seed-preview.json`
-  - `Capstone.restaurants` import 기준
-- `restaurant-categories-seed-preview.json`
-  - `Capstone.restaurant_categories` import 기준
-- `restaurant-menu-items-seed-preview.json`
-  - `Capstone.restaurant_menu_items` import 기준
-- `tags-seed-preview.json`
-  - `Capstone.tags` import 기준
-- `restaurant-tags-seed-preview.json`
-  - `Capstone.restaurant_tags` import 기준
-- `tag-validation-report.json`
-  - 태그 검증 결과
-- `tag-candidate-report.json`
-  - 신규 태그 후보 검토용 결과
-- `manual-review-candidates.json`
-  - 메뉴 신뢰도 낮은 식당 재검토용 결과
-- `combined-seed-summary.json`
-  - combine 결과 요약
-- `combined-seed-duplicates.json`
-  - combine 중복 확인 결과
-
-## Capstone import
-
-### import 대상 파일
-
-아래 5개 파일만 import 대상이다.
-
-- `output/restaurants-seed-preview.json`
-- `output/restaurant-categories-seed-preview.json`
-- `output/restaurant-menu-items-seed-preview.json`
-- `output/tags-seed-preview.json`
-- `output/restaurant-tags-seed-preview.json`
-
-관리용 파일이라 import하지 않는 것:
-
-- `tag-validation-report.json`
-- `tag-candidate-report.json`
-- `manual-review-candidates.json`
-- `combined-seed-summary.json`
-- `combined-seed-duplicates.json`
-
-### 복사
-
-루트 디렉터리 기준:
-
-```powershell
-Copy-Item "Naver_pcmap_api/Naver_seed/output/restaurants-seed-preview.json" "Capstone/Capstone/seed-data/restaurants-seed-preview.json" -Force
-Copy-Item "Naver_pcmap_api/Naver_seed/output/restaurant-categories-seed-preview.json" "Capstone/Capstone/seed-data/restaurant-categories-seed-preview.json" -Force
-Copy-Item "Naver_pcmap_api/Naver_seed/output/restaurant-menu-items-seed-preview.json" "Capstone/Capstone/seed-data/restaurant-menu-items-seed-preview.json" -Force
-Copy-Item "Naver_pcmap_api/Naver_seed/output/tags-seed-preview.json" "Capstone/Capstone/seed-data/tags-seed-preview.json" -Force
-Copy-Item "Naver_pcmap_api/Naver_seed/output/restaurant-tags-seed-preview.json" "Capstone/Capstone/seed-data/restaurant-tags-seed-preview.json" -Force
-```
-
-### Capstone import 실행
-
 ```powershell
 cd Capstone/Capstone
-.\gradlew.bat bootRun --args="--seed.import.enabled=true --seed.import.exit-after-run=true --server.port=18080"
+.\gradlew.bat bootRun --args="--seed.import.enabled=true --seed.import.exit-after-run=true --seed.import.restaurants-file-path=import-data/restaurants-seed-preview.json --seed.import.menu-items-file-path=import-data/restaurant-menu-items-seed-preview.json --seed.import.tags-file-path=import-data/tags-seed-preview.json --seed.import.restaurant-tags-file-path=import-data/restaurant-tags-seed-preview.json"
 ```
 
-### dev DB 전체 초기화가 필요할 때
+## 주의사항
 
-```powershell
-docker exec postgres-dev psql -U dev_user -d dev_db -c "TRUNCATE TABLE list_restaurants, restaurant_categories, restaurant_menu_items, restaurant_tags, restaurants, tags, user_lists, users RESTART IDENTITY CASCADE;"
-```
-
-주의:
-
-- 위 명령은 식당 seed만 지우는 게 아니라 `users`, `user_lists`, `list_restaurants`도 함께 비운다.
-
-## 참고 문서
-
-- [`SRC_FILE_GUIDE.md`](./SRC_FILE_GUIDE.md)
-- [`../../NAVER_SEED_ANALYSIS_PLAN_2026-04-09.md`](../../NAVER_SEED_ANALYSIS_PLAN_2026-04-09.md)
+- 네이버 pcmap HTML 또는 Apollo state 구조가 바뀌면 파싱이 실패할 수 있습니다.
+- 수집 결과는 운영 DB에 바로 넣기 전에 row count, duplicate report, manual review 후보를 확인해야 합니다.
+- Capstone 앱 저장소에 seed 원본 JSON을 커밋하지 않습니다.

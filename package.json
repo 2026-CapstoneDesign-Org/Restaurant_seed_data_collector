@@ -9,6 +9,7 @@
     "seed:areas": "node src/index.js areas",
     "seed:refresh": "node src/index.js refresh-seed",
     "seed:combine": "node src/index.js combine-seed",
+    "test:tags": "node src/tag_extractor.test.js",
     "store": "node src/index.js"
   }
 }

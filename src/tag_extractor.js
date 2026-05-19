@@ -39,6 +39,92 @@ const MENU_TAG_RULES = [
   createMenuRule("하이볼", ["하이볼"], null, 66),
   createMenuRule("맥주", ["생맥주", "맥주"], null, 65),
   createMenuRule("와플", ["와플"], null, 64),
+  createMenuRule("김치찌개", ["김치찌개"], "찌개", 63),
+  createMenuRule("된장찌개", ["된장찌개"], "찌개", 62),
+  createMenuRule("부대찌개", ["부대찌개"], "찌개", 61),
+  createMenuRule("순두부", ["순두부", "순두부찌개"], "찌개", 60),
+  createMenuRule("제육", ["제육", "제육볶음"], null, 59),
+  createMenuRule("삼겹살", ["삼겹살"], "구이", 58),
+  createMenuRule("곱창", ["곱창"], "구이", 57),
+  createMenuRule("막창", ["막창"], "구이", 56),
+  createMenuRule("닭발", ["닭발"], null, 55),
+  createMenuRule("보쌈", ["보쌈"], null, 54),
+  createMenuRule("족발", ["족발"], null, 53),
+  createMenuRule("마라탕", ["마라탕", "마라샹궈"], null, 52),
+  createMenuRule("양꼬치", ["양꼬치"], null, 51),
+  createMenuRule("쭈꾸미", ["쭈꾸미", "주꾸미"], null, 50),
+  createMenuRule("찜닭", ["찜닭"], null, 49),
+  createMenuRule("닭볶음탕", ["닭볶음탕", "닭도리탕"], null, 48),
+  createMenuRule("아구찜", ["아구찜", "아귀찜"], "찜", 47),
+  createMenuRule("해물찜", ["해물찜"], "찜", 46),
+  createMenuRule("텐동", ["텐동"], "덮밥", 45),
+  createMenuRule("포케", ["포케"], null, 44),
+  createMenuRule("샐러드", ["샐러드"], null, 43),
+  createMenuRule("타코", ["타코"], null, 42),
+  createMenuRule("버거", ["버거", "햄버거"], null, 41),
+  createMenuRule("샌드위치", ["샌드위치"], null, 40),
+  createMenuRule("아메리카노", ["아메리카노", "카페 아메리카노"], "커피", 39),
+  createMenuRule("카페라떼", ["카페라떼", "카페 라떼"], "라떼", 38),
+  createMenuRule("바닐라라떼", ["바닐라라떼", "바닐라 라떼"], "라떼", 37),
+  createMenuRule("초코라떼", ["초코라떼", "초코 라떼"], "라떼", 36),
+  createMenuRule("딸기라떼", ["딸기라떼", "딸기 라떼"], "라떼", 35),
+  createMenuRule("돌체라떼", ["돌체라떼", "돌체 라떼"], "라떼", 34),
+  createMenuRule("말차라떼", ["말차라떼", "말차 라떼"], "라떼", 33),
+  createMenuRule("라떼", ["라떼"], "커피", 32),
+  createMenuRule("카페모카", ["카페모카", "카페 모카"], "커피", 31),
+  createMenuRule("카푸치노", ["카푸치노"], "커피", 30),
+  createMenuRule("에스프레소", ["에스프레소"], "커피", 29),
+  createMenuRule("아인슈페너", ["아인슈페너"], "커피", 28),
+  createMenuRule("아포카토", ["아포카토", "아포가토"], "커피", 27),
+  createMenuRule("아샷추", ["아샷추"], "커피", 26),
+  createMenuRule("아이스티", ["아이스티"], null, 25),
+  createMenuRule("자몽에이드", ["자몽에이드", "자몽 에이드"], "에이드", 24),
+  createMenuRule("레몬에이드", ["레몬에이드", "레몬 에이드"], "에이드", 23),
+  createMenuRule("에이드", ["에이드"], null, 22),
+  createMenuRule("대추차", ["대추차"], null, 21),
+  createMenuRule("계란찜", ["계란찜", "달걀찜"], "찜", 20),
+  createMenuRule("탕수육", ["탕수육"], null, 19),
+  createMenuRule("사천탕수육", ["사천탕수육"], "탕수육", 18),
+  createMenuRule("꿔바로우", ["꿔바로우"], null, 17),
+  createMenuRule("깐풍기", ["깐풍기"], null, 16),
+  createMenuRule("양장피", ["양장피"], null, 15),
+  createMenuRule("유린기", ["유린기"], null, 14),
+  createMenuRule("지삼선", ["지삼선"], null, 13),
+  createMenuRule("짜장면", ["짜장면", "자장면"], null, 12),
+  createMenuRule("간짜장", ["간짜장"], "짜장면", 11),
+  createMenuRule("볶음밥", ["볶음밥"], null, 10),
+  createMenuRule("새우볶음밥", ["새우볶음밥", "새우 볶음밥"], "볶음밥", 9),
+  createMenuRule("김치볶음밥", ["김치볶음밥", "김치 볶음밥"], "볶음밥", 8),
+  createMenuRule("잡채밥", ["잡채밥"], "덮밥", 7),
+  createMenuRule("육개장", ["육개장"], null, 6),
+  createMenuRule("황태해장국", ["황태해장국", "황태 해장국"], "해장국", 5),
+  createMenuRule("내장탕", ["내장탕"], null, 4),
+  createMenuRule("술국", ["술국"], null, 3),
+  createMenuRule("어묵탕", ["어묵탕", "오뎅탕"], null, 2),
+  createMenuRule("쫄면", ["쫄면"], null, 1),
+  createMenuRule("라면", ["라면"], null, 0),
+  createMenuRule("오므라이스", ["오므라이스"], null, -1),
+  createMenuRule("떡국", ["떡국"], null, -2),
+  createMenuRule("메밀전병", ["메밀전병"], null, -3),
+  createMenuRule("주먹밥", ["주먹밥"], null, -4),
+  createMenuRule("튀김", ["튀김"], null, -5),
+  createMenuRule("감자튀김", ["감자튀김", "감자 튀김", "프렌치프라이"], "튀김", -6),
+  createMenuRule("새우튀김", ["새우튀김", "새우 튀김"], "튀김", -7),
+  createMenuRule("야채튀김", ["야채튀김", "야채 튀김"], "튀김", -8),
+  createMenuRule("오징어튀김", ["오징어튀김", "오징어 튀김"], "튀김", -9),
+  createMenuRule("후라이드", ["후라이드", "프라이드"], "치킨", -10),
+  createMenuRule("소금빵", ["소금빵", "소금 빵"], null, -11),
+  createMenuRule("단팥빵", ["단팥빵", "단팥 빵"], null, -12),
+  createMenuRule("까르보나라", ["까르보나라"], "파스타", -13),
+  createMenuRule("크림새우", ["크림새우", "크림 새우"], null, -14),
+  createMenuRule("크림치즈볼", ["크림치즈볼", "크림 치즈볼"], null, -15),
+  createMenuRule("수육", ["수육"], null, -16),
+  createMenuRule("순대", ["순대"], null, -17),
+  createMenuRule("토종순대", ["토종순대", "토종 순대"], "순대", -18),
+  createMenuRule("오소리감투", ["오소리감투"], null, -19),
+  createMenuRule("소주", ["소주"], null, -20),
+  createMenuRule("막걸리", ["막걸리"], null, -21),
+  createMenuRule("청하", ["청하"], null, -22),
 ];
 
 const CATEGORY_SPLIT_PATTERN = /\s*(?:,|\/|&|·)\s*|\s+및\s+|\s+and\s+/i;
@@ -77,12 +163,15 @@ const TAG_CANDIDATE_POLICY = {
   ],
   trailingSuffixTokens: ["세트", "정식", "코스", "플래터", "모둠", "한상", "도시락"],
 };
+const MENU_TAG_CONTEXT_POLICY = {
+  blockedAliasSuffixes: ["맛", "향", "소스", "국물", "육수"],
+  blockedFollowingTokens: ["소스", "국물", "육수", "시즈닝"],
+};
 
 function createMenuRule(tagName, aliases, parentTagName = null, priority = 0) {
   return {
     tagName,
     tagKey: buildTagKey("menu", tagName),
-    tagType: "MENU",
     parentTagName,
     parentTagKey: parentTagName ? buildTagKey("menu", parentTagName) : null,
     priority,
@@ -156,12 +245,39 @@ function findMenuRuleForSegment(segment) {
   }
 
   for (const rule of SORTED_MENU_TAG_RULES) {
-    if (rule.aliases.some((alias) => normalizedSegment.includes(alias))) {
+    if (rule.aliases.some((alias) => matchesMenuAlias(normalizedSegment, alias))) {
       return rule;
     }
   }
 
   return null;
+}
+
+function matchesMenuAlias(normalizedSegment, alias) {
+  const aliasIndex = normalizedSegment.indexOf(alias);
+  if (aliasIndex < 0) {
+    return false;
+  }
+
+  const compactTail = normalizedSegment.slice(aliasIndex + alias.length).replace(/\s+/g, "");
+  if (
+    MENU_TAG_CONTEXT_POLICY.blockedAliasSuffixes.some((suffix) =>
+      compactTail.startsWith(suffix)
+    )
+  ) {
+    return false;
+  }
+
+  const tokens = normalizedSegment.split(/\s+/).filter(Boolean);
+  const aliasTokenIndex = tokens.findIndex((token) => token.includes(alias));
+  if (aliasTokenIndex >= 0) {
+    const nextToken = tokens[aliasTokenIndex + 1];
+    if (MENU_TAG_CONTEXT_POLICY.blockedFollowingTokens.includes(nextToken)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function extractMenuTagMatches(menuName) {
@@ -289,7 +405,7 @@ function buildCandidateRecord(candidateName, stats, decision, decisionReasons) {
 }
 
 function validateTagDefinition(definition) {
-  if (!definition?.tagKey || !definition?.tagName || !definition?.tagType) {
+  if (!definition?.tagKey || !definition?.tagName) {
     return {
       accepted: false,
       reason: "missing-required-field",
@@ -306,27 +422,10 @@ function validateTagDefinition(definition) {
     };
   }
 
-  if (
-    definition.parentTagKey &&
-    !["MENU", "CATEGORY"].includes(definition.tagType)
-  ) {
+  if (definition.tagName.length < 2) {
     return {
       accepted: false,
-      reason: "parent-not-allowed-for-tag-type",
-    };
-  }
-
-  if (definition.tagType === "CATEGORY" && definition.tagName.length < 2) {
-    return {
-      accepted: false,
-      reason: "category-tag-too-short",
-    };
-  }
-
-  if (definition.tagType === "MENU" && definition.tagName.length < 2) {
-    return {
-      accepted: false,
-      reason: "menu-tag-too-short",
+      reason: "tag-too-short",
     };
   }
 
@@ -340,7 +439,6 @@ function pushValidationIssue(validationIssues, definition, validationResult, sou
   validationIssues.push({
     tag_key: definition?.tagKey || null,
     tag_name: definition?.tagName || null,
-    tag_type: definition?.tagType || null,
     parent_tag_key: definition?.parentTagKey || null,
     source_text: sanitizeText(sourceText) || null,
     reason: validationResult.reason,
@@ -359,7 +457,6 @@ function addTagDefinition(tagDefinitionsByKey, validationIssues, definition, sou
       {
         tagKey: definition.parentTagKey,
         tagName: definition.parentTagName,
-        tagType: definition.tagType,
         parentTagKey: null,
       },
       sourceText
@@ -376,7 +473,6 @@ function addTagDefinition(tagDefinitionsByKey, validationIssues, definition, sou
     tagDefinitionsByKey.set(definition.tagKey, {
       tag_key: definition.tagKey,
       tag_name: definition.tagName,
-      tag_type: definition.tagType,
       parent_tag_key: definition.parentTagKey || null,
       is_active: true,
     });
@@ -403,15 +499,6 @@ function addRestaurantTag(aggregatedTagsByKey, tagRow) {
     matched_menu_count: existing.matched_menu_count + tagRow.matched_menu_count,
     source_text: existing.source_text || tagRow.source_text,
   });
-}
-
-function createDynamicTagDefinition(tagType, tagName) {
-  return {
-    tagKey: buildTagKey(tagType.toLowerCase(), tagName),
-    tagName,
-    tagType,
-    parentTagKey: null,
-  };
 }
 
 function buildTagCandidateReport(tagSources, existingTags = []) {
@@ -612,23 +699,15 @@ function buildRestaurantTagPreview(tagSources) {
       restaurantTags.push({
         restaurant_seed_index: source.restaurantSeedIndex,
         tag_key: tagRow.tag_key,
-        source_type: tagRow.source_type,
-        source_text: tagRow.source_text,
-        weight: tagRow.weight,
-        confidence: tagRow.confidence,
         matched_menu_count: tagRow.matched_menu_count,
         is_primary: tagRow.tag_key === primaryMenuTagKey,
       });
     });
   }
 
-  const tags = Array.from(tagDefinitionsByKey.values()).sort((left, right) => {
-    if (left.tag_type !== right.tag_type) {
-      return left.tag_type.localeCompare(right.tag_type, "ko");
-    }
-
-    return left.tag_name.localeCompare(right.tag_name, "ko");
-  });
+  const tags = Array.from(tagDefinitionsByKey.values()).sort((left, right) =>
+    left.tag_name.localeCompare(right.tag_name, "ko")
+  );
 
   return {
     tags: tags.map((tag, index) => ({
@@ -672,9 +751,7 @@ function buildTagSourceFromRestaurantRow({
   categoryRow,
   store,
 }) {
-  const menus = Array.isArray(restaurantRow?.menu_json?.menus)
-    ? restaurantRow.menu_json.menus
-    : [];
+  const menus = Array.isArray(store?.menus) ? store.menus : [];
 
   return {
     restaurantSeedIndex,

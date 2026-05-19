@@ -543,6 +543,167 @@ function findPlaceBaseData(apolloState, placeId) {
   return null;
 }
 
+function findPlaceDetailData(apolloState, placeId) {
+  const rootQuery = apolloState?.ROOT_QUERY;
+  if (!rootQuery || typeof rootQuery !== "object") {
+    return null;
+  }
+
+  const placeDetailKeys = Object.keys(rootQuery).filter((key) =>
+    key.startsWith("placeDetail(")
+  );
+
+  for (const key of placeDetailKeys) {
+    if (key.includes(`"id":"${placeId}"`) || key.includes(`"id":${placeId}`)) {
+      return resolveApolloValue(apolloState, rootQuery[key]);
+    }
+  }
+
+  for (const key of placeDetailKeys) {
+    const value = resolveApolloValue(apolloState, rootQuery[key]);
+    const base = resolveApolloValue(apolloState, value?.base);
+    if (sanitizeText(base?.placeId) === sanitizeText(placeId)) {
+      return value;
+    }
+  }
+
+  return placeDetailKeys.length
+    ? resolveApolloValue(apolloState, rootQuery[placeDetailKeys[0]])
+    : null;
+}
+
+function findFieldByPrefix(target, prefix) {
+  if (!target || typeof target !== "object") {
+    return null;
+  }
+
+  const key = Object.keys(target).find((fieldName) =>
+    fieldName.startsWith(prefix)
+  );
+  return key ? target[key] : null;
+}
+
+function normalizeStartEndTime(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const start = sanitizeText(value.start);
+  const end = sanitizeText(value.end);
+  if (!start && !end) {
+    return null;
+  }
+
+  return {
+    start: start || null,
+    end: end || null,
+  };
+}
+
+function normalizeTimeRanges(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) => normalizeStartEndTime(value))
+    .filter(Boolean);
+}
+
+function normalizeLastOrderTimes(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) => {
+      const time = sanitizeText(value?.time);
+      if (!time) {
+        return null;
+      }
+
+      return {
+        type: sanitizeText(value?.type) || null,
+        time,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeWorkingHoursInfo(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const day = sanitizeText(value.day);
+  const businessHours = normalizeStartEndTime(value.businessHours);
+  const breakHours = normalizeTimeRanges(value.breakHours);
+  const lastOrderTimes = normalizeLastOrderTimes(value.lastOrderTimes);
+  const description = sanitizeText(value.description);
+
+  if (!day && !businessHours && breakHours.length === 0 && lastOrderTimes.length === 0 && !description) {
+    return null;
+  }
+
+  return {
+    day: day || null,
+    businessHours,
+    breakHours,
+    lastOrderTimes,
+    description: description || null,
+    showEndsNextDay: Boolean(value.showEndsNextDay),
+  };
+}
+
+function normalizeBusinessHoursPayload(rawBusinessHours) {
+  if (!rawBusinessHours || typeof rawBusinessHours !== "object") {
+    return null;
+  }
+
+  const days = Array.isArray(rawBusinessHours.businessHours)
+    ? rawBusinessHours.businessHours
+        .map((value) => normalizeWorkingHoursInfo(value))
+        .filter(Boolean)
+    : [];
+  const comingIrregularClosedDays = Array.isArray(rawBusinessHours.comingIrregularClosedDays)
+    ? rawBusinessHours.comingIrregularClosedDays
+    : [];
+  const comingRegularClosedDays = sanitizeText(rawBusinessHours.comingRegularClosedDays);
+  const freeText = sanitizeText(rawBusinessHours.freeText);
+
+  if (
+    days.length === 0 &&
+    comingIrregularClosedDays.length === 0 &&
+    !comingRegularClosedDays &&
+    !freeText
+  ) {
+    return null;
+  }
+
+  return {
+    source: "pcmap_business_hours",
+    days,
+    comingIrregularClosedDays,
+    comingRegularClosedDays: comingRegularClosedDays || null,
+    freeText: freeText || null,
+  };
+}
+
+function extractBusinessHoursFromPlaceDetail(placeDetail) {
+  const newBusinessHours = findFieldByPrefix(placeDetail, "newBusinessHours(");
+  if (Array.isArray(newBusinessHours)) {
+    for (const item of newBusinessHours) {
+      const normalized = normalizeBusinessHoursPayload(item);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  const legacyBusinessHours = findFieldByPrefix(placeDetail, "businessHours(");
+  return normalizeBusinessHoursPayload(legacyBusinessHours);
+}
+
 function buildNormalizedMenu(menu, index, keyHint = "") {
   if (!menu || typeof menu !== "object") {
     return null;
@@ -577,6 +738,7 @@ function extractPlaceDataFromApolloState(apolloState, placeId) {
     return null;
   }
 
+  const placeDetail = findPlaceDetailData(apolloState, placeId);
   const coordinate = resolveApolloValue(apolloState, placeBase.coordinate) || null;
   const missingInfo = resolveApolloValue(apolloState, placeBase.missingInfo) || null;
   const conveniences = normalizeStringList(
@@ -628,6 +790,7 @@ function extractPlaceDataFromApolloState(apolloState, placeId) {
     x: sanitizeText(placeBase.x || coordinate?.x || coordinate?.longitude),
     y: sanitizeText(placeBase.y || coordinate?.y || coordinate?.latitude),
     openingHours: resolveApolloValue(apolloState, placeBase.openingHours) || null,
+    businessHours: extractBusinessHoursFromPlaceDetail(placeDetail),
     newBusinessHours:
       resolveApolloValue(apolloState, placeBase.newBusinessHours) || null,
     visitorReviewsTotal:

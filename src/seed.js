@@ -16,7 +16,6 @@ const {
   resolvePrimaryMenuTag,
 } = require("./tag_extractor");
 const {
-  buildMenuPayload,
   buildNormalizedMenuBase,
   toNullableNumber,
 } = require("./menu_normalizer");
@@ -606,6 +605,7 @@ function buildSeedStore(candidate, placeData, menuItems) {
     regionCityName: regionSchema.regionCityName,
     regionDistrictName: regionSchema.regionDistrictName,
     regionCountyName: regionSchema.regionCountyName,
+    regionTownName: regionSchema.regionTownName,
     regionFilterNames: regionSchema.regionFilterNames,
     address: sanitizeText(placeData?.address || candidate.address),
     roadAddress: sanitizeText(placeData?.roadAddress || candidate.roadAddress),
@@ -625,6 +625,7 @@ function buildSeedStore(candidate, placeData, menuItems) {
     visitorReviewsTextReviewTotal:
       placeData?.visitorReviewsTextReviewTotal ?? null,
     openingHours: placeData?.openingHours || null,
+    businessHours: placeData?.businessHours || candidate.businessHours || null,
     newBusinessHours:
       placeData?.newBusinessHours || candidate.newBusinessHours || null,
     conveniences: placeData?.conveniences || [],
@@ -699,6 +700,7 @@ function mergeStore(existing, incoming) {
       preferred.regionCountyName,
       fallback.regionCountyName
     ),
+    regionTownName: mergeText(preferred.regionTownName, fallback.regionTownName),
     regionFilterNames: mergeArray(
       preferred.regionFilterNames,
       fallback.regionFilterNames
@@ -869,24 +871,231 @@ async function collectSeedStores(candidates) {
   };
 }
 
+const PRIMARY_CATEGORY_RULES = [
+  ["중식", ["중식", "중국", "짜장", "짬뽕", "마라", "양꼬치"]],
+  ["일식", ["일식", "초밥", "스시", "라멘", "우동", "소바", "돈가스", "돈까스", "카츠", "생선회", "이자카야"]],
+  ["양식", ["양식", "파스타", "스파게티", "스테이크", "피자", "햄버거", "버거", "샌드위치", "브런치", "타코", "멕시코"]],
+  ["분식", ["분식", "김밥", "떡볶이", "순대", "튀김"]],
+  ["카페/디저트", ["카페", "커피", "디저트", "베이커리", "빵", "케이크", "와플"]],
+  ["치킨", ["치킨", "닭강정"]],
+  ["술집", ["술집", "주점", "호프", "맥주", "바"]],
+  ["한식", ["한식", "국밥", "찌개", "탕", "해장국", "고기", "구이", "갈비", "삼겹살", "보쌈", "족발", "냉면", "칼국수", "백반", "오리", "닭갈비"]],
+];
+
+function resolvePrimaryCategoryName(...values) {
+  const normalized = values
+    .map((value) => sanitizeText(value))
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (!normalized) {
+    return null;
+  }
+
+  for (const [primaryCategoryName, keywords] of PRIMARY_CATEGORY_RULES) {
+    if (keywords.some((keyword) => normalized.includes(keyword.toLowerCase()))) {
+      return primaryCategoryName;
+    }
+  }
+
+  return "기타";
+}
+
+function serializeDetailValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return sanitizeText(value) || null;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return null;
+  }
+}
+
+const CLOCK_TIME_PATTERN = /\b(?:[01]?\d|2[0-4]):[0-5]\d\b/g;
+
+function extractClockTimes(value) {
+  const normalized = sanitizeText(value);
+  if (!normalized) {
+    return [];
+  }
+
+  return Array.from(new Set(normalized.match(CLOCK_TIME_PATTERN) || []));
+}
+
+function buildBusinessTimeEntriesFromText(value) {
+  const text = sanitizeText(value);
+  const times = extractClockTimes(text);
+  if (!text || times.length === 0) {
+    return [];
+  }
+
+  return times.map((time) => ({
+    time,
+    text,
+  }));
+}
+
+function collectAbsoluteBusinessTimeEntries(value) {
+  if (!value) {
+    return [];
+  }
+
+  if (typeof value === "string") {
+    const normalized = sanitizeText(value);
+    if (!normalized) {
+      return [];
+    }
+
+    try {
+      return collectAbsoluteBusinessTimeEntries(JSON.parse(normalized));
+    } catch (error) {
+      return buildBusinessTimeEntriesFromText(normalized);
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectAbsoluteBusinessTimeEntries(item));
+  }
+
+  if (typeof value !== "object") {
+    return [];
+  }
+
+  if (Array.isArray(value.entries)) {
+    return value.entries.flatMap((entry) => {
+      const text = sanitizeText(entry?.text);
+      const time = sanitizeText(entry?.time);
+      if (text && time) {
+        return [{ time, text }];
+      }
+      return buildBusinessTimeEntriesFromText(text || time);
+    });
+  }
+
+  if (sanitizeText(value.__typename) === "NewBusinessHours") {
+    return [
+      ...buildBusinessTimeEntriesFromText(value.description),
+      ...buildBusinessTimeEntriesFromText(value.dayOffDescription),
+    ];
+  }
+
+  return Object.entries(value).flatMap(([key, child]) => {
+    if (key === "status" || key === "__typename") {
+      return [];
+    }
+    return collectAbsoluteBusinessTimeEntries(child);
+  });
+}
+
+function resolveAbsoluteOpeningHours(...values) {
+  const entriesByKey = new Map();
+  for (const value of values) {
+    for (const entry of collectAbsoluteBusinessTimeEntries(value)) {
+      entriesByKey.set(`${entry.time}::${entry.text}`, entry);
+    }
+  }
+
+  const entries = Array.from(entriesByKey.values());
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return {
+    source: "pcmap_absolute_time",
+    entries,
+  };
+}
+
+function isStructuredBusinessHoursPayload(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      value.source === "pcmap_business_hours" &&
+      Array.isArray(value.days) &&
+      value.days.length > 0
+  );
+}
+
+function summarizeTimeRange(range) {
+  if (!range || typeof range !== "object") {
+    return "";
+  }
+
+  const start = sanitizeText(range.start);
+  const end = sanitizeText(range.end);
+  if (!start && !end) {
+    return "";
+  }
+
+  return `${start || ""}-${end || ""}`;
+}
+
+function summarizeWorkingHoursDay(day) {
+  if (!day || typeof day !== "object") {
+    return "";
+  }
+
+  const parts = [];
+  const businessHoursText = summarizeTimeRange(day.businessHours);
+  if (businessHoursText) {
+    parts.push(businessHoursText);
+  }
+
+  const breakHours = Array.isArray(day.breakHours)
+    ? day.breakHours.map((range) => summarizeTimeRange(range)).filter(Boolean)
+    : [];
+  if (breakHours.length > 0) {
+    parts.push(`브레이크 ${breakHours.join(", ")}`);
+  }
+
+  const lastOrderTimes = Array.isArray(day.lastOrderTimes)
+    ? day.lastOrderTimes.map((item) => sanitizeText(item?.time)).filter(Boolean)
+    : [];
+  if (lastOrderTimes.length > 0) {
+    parts.push(`라스트오더 ${lastOrderTimes.join(", ")}`);
+  }
+
+  const description = sanitizeText(day.description);
+  if (description) {
+    parts.push(description);
+  }
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return `${sanitizeText(day.day) || "요일"} ${parts.join(" / ")}`;
+}
+
+function resolveBusinessHoursRawPayload(...values) {
+  const structured = values.find((value) => isStructuredBusinessHoursPayload(value));
+  if (structured) {
+    return structured;
+  }
+
+  return resolveAbsoluteOpeningHours(...values);
+}
+
 function buildRestaurantSeedRows(stores) {
   return stores.map((store, index) => {
     const regionSchema = buildRegionSchema(
       store.adminArea,
       store.address,
-      store.fullAddress,
       store.roadAddress,
       store.regionName
     );
-    const menuPayload = buildMenuPayload(
-      Array.isArray(store.menus) ? store.menus : [],
-      { placeName: store.name }
-    );
-
     return {
       seed_index: index + 1,
       source_place_id: store.placeId,
-      address: sanitizeText(store.fullAddress || store.roadAddress || store.address),
+      address: sanitizeText(store.address) || null,
+      road_address: sanitizeText(store.roadAddress) || null,
       created_at: "NOW()",
       deleted_at: null,
       image_url: sanitizeText(store.imageUrl) || null,
@@ -895,6 +1104,11 @@ function buildRestaurantSeedRows(stores) {
       lat: toNullableNumber(store.y),
       lng: toNullableNumber(store.x),
       name: sanitizeText(store.name),
+      category_name: sanitizeText(store.broadCategory || store.category) || "category-other",
+      primary_category_name: resolvePrimaryCategoryName(
+        store.broadCategory,
+        store.category
+      ),
       region_name: sanitizeText(store.regionName || regionSchema.regionName),
       region_city_name: sanitizeText(
         store.regionCityName || regionSchema.regionCityName
@@ -905,18 +1119,35 @@ function buildRestaurantSeedRows(stores) {
       region_county_name: sanitizeText(
         store.regionCountyName || regionSchema.regionCountyName
       ) || null,
-      region_filter_names:
-        Array.isArray(store.regionFilterNames) && store.regionFilterNames.length > 0
-          ? store.regionFilterNames
-          : regionSchema.regionFilterNames,
+      region_town_name: sanitizeText(
+        store.regionTownName || regionSchema.regionTownName
+      ) || null,
+      region_filter_names: Array.from(
+        new Set(
+          [
+            ...(Array.isArray(store.regionFilterNames)
+              ? store.regionFilterNames
+              : []),
+            ...(Array.isArray(regionSchema.regionFilterNames)
+              ? regionSchema.regionFilterNames
+              : []),
+            sanitizeText(store.regionTownName || regionSchema.regionTownName),
+          ]
+            .map((value) => sanitizeText(value))
+            .filter(Boolean)
+        )
+      ),
       updated_at: "NOW()",
+      phone_number: sanitizeText(store.telephone) || null,
+      business_hours_raw: serializeDetailValue(
+        resolveBusinessHoursRawPayload(
+          store.openingHours,
+          store.businessHours,
+          store.newBusinessHours
+        )
+      ),
       pcmap_place_id: sanitizeText(store.placeId) || null,
-      menu_json: {
-        source: "pcmap",
-        place_id: sanitizeText(store.placeId) || null,
-        ...menuPayload,
-      },
-      menu_updated_at: "NOW()",
+      menu_updated_at: new Date().toISOString(),
     };
   });
 }
@@ -948,7 +1179,6 @@ function buildRestaurantMenuItemSeedRows(stores) {
           seed_index: `${storeIndex + 1}-${menuIndex + 1}`,
           restaurant_seed_index: storeIndex + 1,
           display_order: normalizedMenu.displayOrder,
-          source_menu_id: normalizedMenu.sourceMenuId,
           menu_name: normalizedMenu.menuName,
           normalized_menu_name: primaryMenuTag
             ? primaryMenuTag.tagName
@@ -967,7 +1197,6 @@ function buildRestaurantMenuItemSeedRows(stores) {
 
 function buildDatabaseSeedPreview(stores) {
   const restaurants = buildRestaurantSeedRows(stores);
-  const restaurantCategories = buildRestaurantCategorySeedRows(stores);
   const restaurantMenuItems = buildRestaurantMenuItemSeedRows(stores);
   const tagPreview = buildRestaurantTagPreview(
     stores.map((store, index) => buildTagSourceFromStore(store, index + 1))
@@ -975,7 +1204,6 @@ function buildDatabaseSeedPreview(stores) {
 
   return {
     restaurants,
-    restaurantCategories,
     restaurantMenuItems,
     tags: tagPreview.tags,
     restaurantTags: tagPreview.restaurantTags,
@@ -1019,7 +1247,6 @@ async function runSeedPipeline() {
     stores: seedStoreCollection.stores,
     databaseSeedPreview: {
       restaurantCount: databaseSeedPreview.restaurants.length,
-      restaurantCategoryCount: databaseSeedPreview.restaurantCategories.length,
       restaurantMenuItemCount: databaseSeedPreview.restaurantMenuItems.length,
       tagCount: databaseSeedPreview.tags.length,
       restaurantTagCount: databaseSeedPreview.restaurantTags.length,
@@ -1035,10 +1262,6 @@ async function runSeedPipeline() {
   const restaurantsSeedPath = saveJson(
     withOutputPrefix("restaurants-seed-preview.json"),
     databaseSeedPreview.restaurants
-  );
-  const restaurantCategoriesSeedPath = saveJson(
-    withOutputPrefix("restaurant-categories-seed-preview.json"),
-    databaseSeedPreview.restaurantCategories
   );
   const restaurantMenuItemsSeedPath = saveJson(
     withOutputPrefix("restaurant-menu-items-seed-preview.json"),
@@ -1074,9 +1297,6 @@ async function runSeedPipeline() {
   console.log(`[seed-stores] selected=${seedStoreCollection.stores.length}`);
   console.log(`[saved-summary] ${summaryPath}`);
   console.log(`[saved-restaurants-preview] ${restaurantsSeedPath}`);
-  console.log(
-    `[saved-restaurant-categories-preview] ${restaurantCategoriesSeedPath}`
-  );
   console.log(
     `[saved-restaurant-menu-items-preview] ${restaurantMenuItemsSeedPath}`
   );

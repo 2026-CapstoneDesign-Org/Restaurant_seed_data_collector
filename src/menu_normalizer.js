@@ -118,7 +118,6 @@ function buildNormalizedMenuBase(menu, index, options = {}) {
   }
 
   return {
-    sourceMenuId: sanitizeText(menu?.id || menu?.raw?.id) || null,
     displayOrder: Number.isFinite(menu?.index) ? menu.index : index,
     menuName,
     priceText:
